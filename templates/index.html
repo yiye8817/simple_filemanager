@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container-fluid p-0 d-flex flex-column vh-100">
+        <!-- 顶部导航栏 -->
+        <nav class="navbar navbar-expand-lg navbar-dark">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="#">
+                    <i class="bi bi-cloud me-2"></i>云端文件管理
+                </a>
+                <div class="d-flex flex-grow-1 mx-4 search-container">
+                    <div class="input-group">
+                        <span class="input-group-text bg-transparent border-end-0">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input class="form-control bg-transparent border-start-0" type="search" placeholder="搜索全部文件" id="search-input">
+                    </div>
+                </div>
+                <div class="ms-auto d-flex align-items-center">
+                    <div class="storage-info me-4">
+                        <div class="text-light mb-1 small" id="storage-text">已使用: 0GB / 10GB</div>
+                        <div class="progress" style="height: 4px;">
+                            <div class="progress-bar" id="storage-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="dropdown">
+                        <a href="#" class="text-decoration-none dropdown-toggle d-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-person-circle fs-4 me-2"></i>
+                            <span class="text-light">{{ user_name }}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#userSettingsModal"><i class="bi bi-gear me-2"></i>用户设置</a></li>
+                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#apiKeyModal"><i class="bi bi-key me-2"></i>API密钥</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right me-2"></i>退出登录</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <div class="row flex-grow-1 g-0">
+            <!-- 侧边栏 -->
+            <div class="col-auto sidebar">
+                <div class="list-group border-0 rounded-0">
+                    <a href="#" class="list-group-item active" id="all-files">
+                        <i class="bi bi-folder me-2"></i>我的文件
+                    </a>
+                    <a href="#" class="list-group-item" id="images">
+                        <i class="bi bi-image me-2"></i>图片
+                    </a>
+                    <a href="#" class="list-group-item" id="documents">
+                        <i class="bi bi-file-text me-2"></i>文档
+                    </a>
+                    <a href="#" class="list-group-item" id="videos">
+                        <i class="bi bi-film me-2"></i>视频
+                    </a>
+                    <a href="#" class="list-group-item" id="audio">
+                        <i class="bi bi-music-note me-2"></i>音频
+                    </a>
+                    <a href="#" class="list-group-item" id="archives">
+                        <i class="bi bi-file-zip me-2"></i>压缩包
+                    </a>
+                    <a href="#" class="list-group-item" id="code">
+                        <i class="bi bi-code-slash me-2"></i>代码文件
+                    </a>
+                    <a href="#" class="list-group-item" id="others">
+                        <i class="bi bi-three-dots me-2"></i>其它
+                    </a>
+                    <div class="separator my-3"></div>
+                    <a href="#" class="list-group-item" id="recent">
+                        <i class="bi bi-clock-history me-2"></i>最近
+                    </a>
+                    <a href="#" class="list-group-item" id="shared">
+                        <i class="bi bi-share me-2"></i>共享文件
+                    </a>
+                    <a href="#" class="list-group-item" id="favorites">
+                        <i class="bi bi-star me-2"></i>收藏夹
+                    </a>
+                </div>
+                
+                <div class="upload-btn-container">
+                    <button class="btn btn-success w-100" id="upload-btn">
+                        <i class="bi bi-upload me-2"></i>上传文件
+                    </button>
+                </div>
+            </div>
+
+            <!-- 主内容区 -->
+            <div class="col content-area">
+                <div class="path-navigation">
+                    <button class="btn btn-sm btn-icon me-2" id="back-button">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <span id="current-path">/</span>
+                </div>
+
+                <!-- 功能按钮 -->
+                <div class="action-buttons">
+                    <div class="btn-group">
+                        <button class="btn btn-outline" id="new-folder-btn">
+                            <i class="bi bi-folder-plus me-1"></i>新建文件夹
+                        </button>
+                        <button class="btn btn-outline" id="delete-btn" disabled>
+                            <i class="bi bi-trash me-1"></i>删除
+                        </button>
+                        <button class="btn btn-outline" id="download-btn" disabled>
+                            <i class="bi bi-download me-1"></i>下载
+                        </button>
+                        <button class="btn btn-outline" id="preview-btn" disabled>
+                            <i class="bi bi-eye me-1"></i>预览
+                        </button>
+                        <button class="btn btn-outline" id="share-btn" disabled>
+                            <i class="bi bi-share me-1"></i>分享
+                        </button>
+                    </div>
+                    
+                    <div class="view-controls">
+                        <div class="btn-group">
+                            <button class="btn btn-outline active" id="grid-view">
+                                <i class="bi bi-grid"></i>
+                            </button>
+                            <button class="btn btn-outline" id="list-view">
+                                <i class="bi bi-list"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 文件显示区 -->
+                <div class="files-container">
+                    <div id="files-grid" class="row g-4">
+                        <!-- 文件将通过JavaScript显示 -->
+                    </div>
+                    <div id="files-list" class="table-responsive d-none">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th width="3%"></th>
+                                    <th width="37%">文件名</th>
+                                    <th width="15%">大小</th>
+                                    <th width="15%">类型</th>
+                                    <th width="15%">修改日期</th>
+                                    <th width="15%">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="files-list-body">
+                                <!-- 文件将通过JavaScript显示 -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="empty-folder" class="text-center d-none">
+                        <div class="empty-icon">
+                            <i class="bi bi-folder2-open"></i>
+                        </div>
+                        <h5>此文件夹为空</h5>
+                        <p>试试上传一些文件或创建一个文件夹</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 上传模态框 -->
+    <div class="modal fade" id="upload-modal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">上传文件</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="upload-area" id="drop-area">
+                        <p class="text-center mb-3">拖放文件到这里或点击选择文件</p>
+                        <input type="file" class="d-none" id="file-input" multiple>
+                        <button class="btn btn-primary d-block mx-auto" id="select-files-btn">选择文件</button>
+                    </div>
+                    
+                    <div class="selected-files mt-4 d-none">
+                        <h6>已选择的文件</h6>
+                        <ul class="list-group" id="selected-files-list"></ul>
+                    </div>
+                    
+                    <div class="upload-progress mt-4 d-none">
+                        <h6>上传进度</h6>
+                        <div class="progress mb-2">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+                        </div>
+                        <p class="text-center" id="upload-status">准备上传...</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-success" id="upload-submit">开始上传</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新建文件夹模态框 -->
+    <div class="modal fade" id="new-folder-modal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">新建文件夹</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="folder-name" class="form-label">文件夹名称</label>
+                        <input type="text" class="form-control" id="folder-name" placeholder="新建文件夹">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-success" id="create-folder-btn">创建</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文件预览模态框 -->
+    <div class="modal fade" id="preview-modal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="preview-title">文件预览</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="preview-content">
+                    <!-- 预览内容将通过JavaScript渲染 -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                    <button type="button" class="btn btn-primary" id="preview-download">下载</button>
+                    <button type="button" class="btn btn-success" id="preview-share">分享</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API密钥模态框 -->
+    <div class="modal fade" id="apiKeyModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">API密钥管理</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>您可以使用API密钥通过外部程序访问您的文件。请妥善保管您的API密钥，不要泄露给他人。</p>
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        API密钥可用于访问您账户中的所有文件和文件夹。如果您认为密钥已泄露，请立即重新生成。
+                    </div>
+                    
+                    <div class="input-group mb-3">
+                        <span class="input-group-text">您的API密钥</span>
+                        <input type="text" class="form-control" id="user-api-key" readonly>
+                        <button class="btn btn-outline-primary" type="button" onclick="copyApiKey()">复制</button>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <h6>API使用示例：</h6>
+                        <pre class="bg-light p-3 rounded">
+curl -H "X-API-Key: 您的API密钥" https://您的域名/api/external/files
+
+# 上传文件
+curl -X POST -H "X-API-Key: 您的API密钥" -F "file=@本地文件路径" https://您的域名/api/external/upload
+                        </pre>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" onclick="regenerateApiKey()">重新生成密钥</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户设置模态框 -->
+    <div class="modal fade" id="userSettingsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">用户设置</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="user-settings-form">
+                        <div class="mb-3">
+                            <label for="display-name" class="form-label">显示名称</label>
+                            <input type="text" class="form-control" id="display-name">
+                        </div>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">电子邮箱</label>
+                            <input type="email" class="form-control" id="email">
+                        </div>
+                        
+                        <hr>
+                        <h6>修改密码</h6>
+                        
+                        <div class="mb-3">
+                            <label for="current-password" class="form-label">当前密码</label>
+                            <input type="password" class="form-control" id="current-password">
+                        </div>
+                        <div class="mb-3">
+                            <label for="new-password" class="form-label">新密码</label>
+                            <input type="password" class="form-control" id="new-password">
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirm-password" class="form-label">确认新密码</label>
+                            <input type="password" class="form-control" id="confirm-password">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="saveUserSettings()">保存设置</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/highlight.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
