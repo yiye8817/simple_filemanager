@@ -1,0 +1,412 @@
+/* 全局样式 */
+:root {
+    --primary-color: #4a6ee0;
+    --hover-color: #3959c2;
+    --secondary-color: #6c757d;
+    --light-color: #f8f9fa;
+    --dark-color: #343a40;
+    --navbar-height: 60px;
+    --sidebar-width: 220px;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f5f7fa;
+    color: #333;
+}
+
+/* 导航栏样式 */
+.navbar {
+    background-color: var(--primary-color);
+    height: var(--navbar-height);
+    padding: 0 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+    font-weight: 600;
+}
+
+.search-container {
+    max-width: 600px;
+}
+
+.search-container .input-group-text,
+.search-container .form-control {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+.search-container .form-control::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.search-container .form-control:focus {
+    box-shadow: none;
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.user-avatar {
+    color: white;
+    cursor: pointer;
+}
+
+/* 侧边栏样式 */
+.sidebar {
+    width: var(--sidebar-width);
+    background-color: white;
+    box-shadow: 1px 0 3px rgba(0, 0, 0, 0.05);
+    padding: 20px 0;
+    height: calc(100vh - var(--navbar-height));
+    overflow-y: auto;
+}
+
+.sidebar .list-group-item {
+    border: none;
+    border-radius: 0;
+    padding: 10px 25px;
+    color: var(--dark-color);
+    margin-bottom: 2px;
+}
+
+.sidebar .list-group-item:hover {
+    background-color: rgba(74, 110, 224, 0.08);
+    color: var(--primary-color);
+}
+
+.sidebar .list-group-item.active {
+    background-color: rgba(74, 110, 224, 0.12);
+    color: var(--primary-color);
+    font-weight: 500;
+}
+
+.separator {
+    height: 1px;
+    background-color: #e9ecef;
+    margin: 8px 20px;
+}
+
+.upload-btn-container {
+    padding: 0 20px;
+    position: absolute;
+    bottom: 20px;
+    width: 100%;
+}
+
+/* 内容区域样式 */
+.content-area {
+    padding: 20px;
+    height: calc(100vh - var(--navbar-height));
+    overflow-y: auto;
+}
+
+.path-navigation {
+    padding: 10px 0;
+    margin-bottom: 15px;
+    color: var(--secondary-color);
+    display: flex;
+    align-items: center;
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: #e9ecef;
+    color: var(--secondary-color);
+}
+
+.btn-icon:hover {
+    background-color: #dee2e6;
+    color: var(--dark-color);
+}
+
+.action-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.btn-outline {
+    border: 1px solid #dee2e6;
+    background-color: white;
+    color: var(--secondary-color);
+}
+
+.btn-outline:hover, .btn-outline.active {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+/* 文件格子视图 */
+.file-card {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    padding: 15px;
+    text-align: center;
+    position: relative;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.file-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+}
+
+.file-icon {
+    font-size: 40px;
+    margin-bottom: 10px;
+    color: var(--primary-color);
+}
+
+.file-name {
+    font-size: 14px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-info {
+    font-size: 12px;
+    color: var(--secondary-color);
+    margin-top: 5px;
+}
+
+.file-checkbox {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1;
+}
+
+/* 文件列表视图 */
+.table .file-icon-sm {
+    font-size: 20px;
+    color: var(--primary-color);
+}
+
+.table tr {
+    cursor: pointer;
+}
+
+.table tr:hover {
+    background-color: rgba(74, 110, 224, 0.05);
+}
+
+/* 空文件夹提示 */
+.empty-folder {
+    text-align: center;
+    padding: 60px 0;
+    color: var(--secondary-color);
+}
+
+.empty-icon {
+    font-size: 60px;
+    margin-bottom: 20px;
+    color: #e9ecef;
+}
+
+/* 上传区域 */
+.upload-area {
+    border: 2px dashed #dee2e6;
+    border-radius: 8px;
+    padding: 30px;
+    text-align: center;
+    background-color: #f8f9fa;
+}
+
+.upload-area.drag-over {
+    border-color: var(--primary-color);
+    background-color: rgba(74, 110, 224, 0.05);
+}
+
+/* 预览模态框 */
+.preview-content {
+    max-height: 70vh;
+    overflow: auto;
+}
+
+.preview-image {
+    max-width: 100%;
+    margin: 0 auto;
+    display: block;
+}
+
+.preview-video, .preview-audio {
+    width: 100%;
+    max-height: 60vh;
+}
+
+.preview-text {
+    font-family: monospace;
+    white-space: pre-wrap;
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 4px;
+}
+
+/* 存储信息 */
+.storage-info {
+    width: 150px;
+}
+
+.progress {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.progress-bar {
+    background-color: #fff;
+}
+
+/* 响应式调整 */
+@media (max-width: 992px) {
+    .sidebar {
+        width: 200px;
+    }
+    
+    .file-card {
+        padding: 10px;
+    }
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        left: -220px;
+        z-index: 1030;
+        transition: all 0.3s ease;
+    }
+    
+    .sidebar.show {
+        left: 0;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+    }
+    
+    .view-controls {
+        margin-top: 10px;
+    }
+}
+/* 文件项样式 */
+.file-item {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    border: 2px solid transparent;
+}
+
+.file-item:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+.file-item.selected {
+    background-color: rgba(13, 110, 253, 0.1);
+    border-color: #0d6efd;
+}
+
+/* 焦点样式 */
+.file-item.focused {
+    outline: 2px solid #0d6efd;
+    z-index: 1;
+}
+
+/* 点击反馈效果 */
+.file-item:active {
+    transform: scale(0.98);
+}
+
+/* 列表视图样式 */
+#files-list tbody tr.file-item {
+    transition: background-color 0.2s ease;
+}
+
+#files-list tbody tr.file-item.selected {
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+#files-list tbody tr.file-item.focused {
+    outline: 2px solid #0d6efd;
+}
+
+/* 文件图标样式 */
+.file-icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 60px;
+}
+
+/* 选择指示器 */
+.select-indicator {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.file-item.selected .select-indicator {
+    opacity: 1;
+}
+
+/* 动画效果 */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.file-item.focused:not(:active) {
+    animation: pulse 1s ease-in-out;
+}
+/* 分享状态图标 */
+.file-item .bi-share-fill {
+    color: #28a745;
+    font-size: 1.2rem;
+}
+
+/* 文件操作下拉菜单 */
+.file-actions .dropdown-toggle::after {
+    display: none;
+}
+
+.file-actions .dropdown-toggle {
+    opacity: 0.5;
+}
+
+.file-item:hover .file-actions .dropdown-toggle {
+    opacity: 1;
+}
+
+.file-actions .dropdown-menu {
+    min-width: 200px;
+}
+
+.file-actions .dropdown-item i {
+    width: 20px;
+    text-align: center;
+}
+
+/* API密钥相关样式 */
+#apiKeyModal pre {
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+}
+
+#user-api-key {
+    font-family: monospace;
+    background-color: #f8f9fa;
+}
+
+/* 共享链接样式 */
+#share-url-input {
+    font-family: monospace;
+    background-color: #f8f9fa;
+}
