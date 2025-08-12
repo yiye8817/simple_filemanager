@@ -15,6 +15,8 @@ class Config:
     # 多数据库配置
     SQLALCHEMY_BINDS = {
         'vocabulary': os.environ.get('VOCABULARY_DB_URL') or 'sqlite:///vocabulary.db',
+        #增加resources_manager的数据库到file_manager工程中来
+        'resources_manager': os.environ.get('SRCS_MANAGER_DB_URL') or 'sqlite:///resources_manager.db',
         # 'users': os.environ.get('USERS_DB_URL') or 'sqlite:///users.db',
         # 'analytics': os.environ.get('ANALYTICS_DB_URL') or 'sqlite:///analytics.db',
         # 'cache': os.environ.get('CACHE_DB_URL') or 'sqlite:///cache.db'

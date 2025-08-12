@@ -1,0 +1,155 @@
+{% extends "resources_manager/base.html" %}
+
+{% block content %}
+<!-- 测试显示用户信息 -->
+<div class="user-info-banner alert alert-info mb-4" role="alert">
+    <h4 class="alert-heading">欢迎您，{{ user_name }}!</h4>
+    <p>您可以在这里管理、搜索和浏览您的在线资源。</p>
+</div>
+
+<div class="resource-list">
+    <div class="filters">
+        <select id="categoryFilter" class="form-control">
+            <option value="">所有分类</option>
+            <option value="视频">视频</option>
+            <option value="音频">音频</option>
+            <option value="文档">文档</option>
+            <option value="应用">应用</option>
+            <option value="链接">链接</option>
+            <option value="其他">其他</option>
+        </select>
+        
+               <input type="text" id="searchInput" class="form-control" placeholder="搜索标题、标签或作者...">
+        <button onclick="loadResources()" class="btn btn-primary">搜索</button>
+    </div>
+    
+    <div id="resourcesContainer" class="resources-grid">
+        <!-- 资源卡片将通过JavaScript动态加载 -->
+    </div>
+    
+    <div id="pagination" class="pagination">
+        <!-- 分页控件将通过JavaScript动态加载 -->
+    </div>
+</div>
+
+<script>
+let currentPage = 1;
+let totalPages = 1;
+
+function loadResources(page = 1) {
+    currentPage = page;
+    const category = document.getElementById('categoryFilter').value;
+    console.log("categoryFilter:"+category)
+    const search = document.getElementById('searchInput').value;
+    console.log("searchInput:"+category)
+    axios.get('/api/resources', {
+        params: {
+            page: page,
+            per_page: 12,
+            category: category,
+            search: search
+        }
+    })
+    .then(response => {
+        const data = response.data;
+        displayResources(data.resources);
+        totalPages = data.pages;
+        updatePagination();
+    })
+    .catch(error => {
+        console.error('加载资源失败:', error);
+        alert('加载资源失败');
+    });
+}
+
+function displayResources(resources) {
+    const container = document.getElementById('resourcesContainer');
+    container.innerHTML = '';
+    
+    resources.forEach(resource => {
+        const card = createResourceCard(resource);
+        container.appendChild(card);
+    });
+}
+
+function createResourceCard(resource) {
+    const card = document.createElement('div');
+    console.log(resource)
+    card.className = 'resource-card';
+    card.innerHTML = `
+        <div class="resource-poster">
+            ${resource.poster_url ? 
+                `<img src="${resource.poster_url}" alt="${resource.title}">` : 
+                '<div class="no-poster">无海报</div>'
+            }
+        </div>
+        <div class="resource-info">
+            <h3>${resource.title}</h3>
+            <p class="category">${resource.category}</p>
+            <p class="rating">评分: ${resource.rating || 0}/5</p>
+            <div class="actions">
+                <a href="${resource.resource_link}" target="_blank" class="btn btn-sm btn-primary">访问资源</a>
+                <a href="/api/edit/${resource.id}" class="btn btn-sm btn-secondary">编辑</a>
+                <button onclick="deleteResource(${resource.id})" class="btn btn-sm btn-danger">删除</button>
+            </div>
+        </div>
+    `;
+    return card;
+}
+
+function updatePagination() {
+    const pagination = document.getElementById('pagination');
+    pagination.innerHTML = '';
+    
+    // 上一页
+    if (currentPage > 1) {
+        const prevBtn = document.createElement('button');
+        prevBtn.textContent = '上一页';
+        prevBtn.onclick = () => loadResources(currentPage - 1);
+        pagination.appendChild(prevBtn);
+    }
+    
+    // 页码
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+            const pageBtn = document.createElement('button');
+            pageBtn.textContent = i;
+            pageBtn.className = i === currentPage ? 'active' : '';
+            pageBtn.onclick = () => loadResources(i);
+            pagination.appendChild(pageBtn);
+        } else if (i === currentPage - 3 || i === currentPage + 3) {
+            const dots = document.createElement('span');
+            dots.textContent = '...';
+            pagination.appendChild(dots);
+        }
+    }
+    
+    // 下一页
+    if (currentPage < totalPages) {
+        const nextBtn = document.createElement('button');
+        nextBtn.textContent = '下一页';
+        nextBtn.onclick = () => loadResources(currentPage + 1);
+        pagination.appendChild(nextBtn);
+    }
+}
+
+function deleteResource(id) {
+    if (!confirm('确定要删除这个资源吗？')) return;
+    
+    axios.delete(`/api/resources/${id}`)
+        .then(() => {
+            alert('删除成功');
+            loadResources(currentPage);
+        })
+        .catch(error => {
+            console.error('删除失败:', error);
+            alert('删除失败');
+        });
+}
+
+// 页面加载时加载资源
+document.addEventListener('DOMContentLoaded', () => {
+    loadResources();
+});
+</script>
+{% endblock %}

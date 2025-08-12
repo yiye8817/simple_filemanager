@@ -1,0 +1,85 @@
+{% extends "resources_manager/base.html" %}
+
+{% block content %}
+<div class="import-container">
+    <h2>批量导入资源</h2>
+    
+    <div class="import-instructions">
+        <h3>导入说明：</h3>
+        <p>支持CSV和Excel文件格式，文件应包含以下列：</p>
+        <ul>
+            <li>标题（必填）</li>
+            <li>资源链接（必填）</li>
+            <li>资源海报</li>
+            <li>分类</li>
+            <li>特征字</li>
+            <li>代理</li>
+            <li>详细信息</li>
+            <li>作者</li>
+            <li>来源</li>
+            <li>评分</li>
+            <li>子类</li>
+        </ul>
+        
+        <a href="/static/template.xlsx" class="btn btn-secondary" download>下载模板文件</a>
+    </div>
+    
+    <form id="importForm" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="importFile">选择文件</label>
+            <input type="file" id="importFile" name="file" class="form-control" accept=".csv,.xlsx,.xls" required>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">开始导入</button>
+            <a href="/" class="btn btn-secondary">取消</a>
+        </div>
+    </form>
+    
+    <div id="importResults" class="import-results" style="display: none;">
+        <h3>导入结果</h3>
+        <p id="resultMessage"></p>
+    </div>
+</div>
+
+<script>
+document.getElementById('importForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    
+    submitBtn.disabled = true;
+    submitBtn.textContent = '导入中...';
+    
+    try {
+        const response = await axios.post('/api/resources/batch', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+        
+        const results = document.getElementById('importResults');
+        const message = document.getElementById('resultMessage');
+                results.style.display = 'block';
+        message.textContent = response.data.message;
+        message.className = 'success';
+        
+        // 清空表单
+        e.target.reset();
+    } catch (error) {
+        console.error('导入失败:', error);
+        
+        const results = document.getElementById('importResults');
+        const message = document.getElementById('resultMessage');
+        
+        results.style.display = 'block';
+        message.textContent = '导入失败: ' + (error.response?.data?.error || '未知错误');
+        message.className = 'error';
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '开始导入';
+    }
+});
+</script>
+{% endblock %}

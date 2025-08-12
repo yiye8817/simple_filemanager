@@ -1060,9 +1060,18 @@ function previewSelectedFile() {
         previewFile(filePath);
     }
 }
-
+//yiye add for 
+function selectedFileIsDir(){
+    const focusedItem = document.querySelector('.file-item.focused');
+        if (!focusedItem) return;
+    return focusedItem.dataset.isDir === 'true';
+}
 // 预览文件
 function previewFile(filePath) {
+    if (selectedFileIsDir()){
+        loadFiles(filePath)
+        return;
+    }
     const modal = new bootstrap.Modal(document.getElementById('preview-modal'));
     const modalTitle = document.getElementById('preview-title');
     const modalContent = document.getElementById('preview-content');
@@ -1224,6 +1233,7 @@ function previewFile(filePath) {
 
 // 删除选中的文件
 function deleteSelectedFiles() {
+    console.log('deleteSelectedFiles:'+selectedFiles)
     if (selectedFiles.length === 0) return;
     
     if (!confirm(`确定要删除${selectedFiles.length > 1 ? '这些文件' : '这个文件'}吗？此操作不可恢复。`)) {

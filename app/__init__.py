@@ -38,11 +38,16 @@ def create_app(config_name='default'):
     from .routes.file_routes import file_bp
     from .routes.user_routes import user_bp
     from .routes.vocabulary import vocabulary_bp
+    #添加拷贝的蓝图到这里并注册
+    from .routes.resource_routes import resource_bp
+    app.register_blueprint(resource_bp, url_prefix='/api')
     
     app.register_blueprint(vocabulary_bp, url_prefix='/api/v1')
     app.register_blueprint(auth_bp)
     app.register_blueprint(file_bp)
     app.register_blueprint(user_bp)
+    # app.register_blueprint(resource_bp, url_prefix='/api')
+
     
     # 创建数据库表
     with app.app_context():

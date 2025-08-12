@@ -11,7 +11,7 @@ from app import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta, timezone
-
+from unidecode import unidecode
 file_bp = Blueprint('file', __name__)
 logger = logging.getLogger(__name__)
 # 主页路由
@@ -174,6 +174,9 @@ def upload_file():
     
     files = request.files.getlist('files[]')
     current_path = request.form.get('path', '')
+    #去除开始的绝对路径
+    if current_path.startswith('/'):
+        current_path = current_path[1:]
 
     print(f"curren_path:{current_path}")
     # 检查当前路径是否有效
@@ -199,13 +202,16 @@ def upload_file():
     
     for file in files:
         if file.filename:
-            filename = secure_filename(file.filename)
+            filename0 = file.filename
+            filename = unidecode(file.filename)
+            filename = secure_filename(filename)
             
             # 确保文件名不重复
             base_name, extension = os.path.splitext(filename)
             # file_type = get_file_type_info(extension)
             counter = 1
-            while File.query.filter_by(name=filename, parent_id=parent.id if parent else None, user_id=user_id).first():
+            #修改name->path,8-2
+            while File.query.filter_by(path=filename, parent_id=parent.id if parent else None, user_id=user_id).first():
                 filename = f"{base_name}_{counter}{extension}"
                 counter += 1
             
@@ -229,7 +235,7 @@ def upload_file():
             
             # 创建数据库记录
             new_file = File(
-                name=filename,
+                name=filename0,
                 path=file_path,
                 size=file_size,
                 file_type=get_file_type(filename),
@@ -328,10 +334,13 @@ def create_folder():
     
     folder_name = data.get('name')
     current_path = data.get('path', '')
-    
+    if current_path.startswith('/'):
+        current_path=current_path[1:]
+    print(f"/api/folder/create => {folder_name},{current_path}")
     if not folder_name:
         return jsonify({'error': '文件夹名称不能为空'}), 400
-    
+    folder_name0 = folder_name
+    folder_name = unidecode(folder_name)  # 转换为英文字符，减少安全问题
     # 确保文件夹名称有效
     folder_name = secure_filename(folder_name)
     
@@ -356,7 +365,7 @@ def create_folder():
     
     # 创建数据库记录
     new_folder = File(
-        name=folder_name,
+        name=folder_name0,
         path=folder_path,
         size=0,
         file_type='文件夹',
@@ -835,13 +844,14 @@ def get_file_by_path(path, user_id):
     parent_id = 1
     if len(parts) > 1:
         parent_path = '/'.join(parts[:-1])
+        print(f"get_file_by_path:{parent_path}")
         parent = get_directory_by_path(parent_path, user_id)
         if not parent:
             return None
         parent_id = parent.id
     
-    # 查找文件
-    return File.query.filter_by(name=filename, parent_id=parent_id, user_id=user_id).first()
+    # 查找文件,修改=filename为path
+    return File.query.filter_by(path=path, parent_id=parent_id, user_id=user_id).first()
 def create_directory(name, parent_id, user_id):
     """创建目录记录"""
     newf = File(
@@ -859,7 +869,7 @@ def create_directory(name, parent_id, user_id):
     db.session.commit()
     return newf
 
-def get_directory_by_path(path, user_id):
+def get_directory_by_path(path:str, user_id):
     """根据路径获取目录"""
     parts = [p for p in path.split('/') if p]
     
@@ -871,19 +881,22 @@ def get_directory_by_path(path, user_id):
             is_directory=True
         ).first()  or create_directory('/', 0, user_id)  # 根目录默认命名为'root' # 返回用户的根目录
         # return None
-    print(f"get_directory_by_path:{parts}")
-    current_directory = None
-    for i, part in enumerate(parts):
-        # 如果这是第一部分，则在根目录中查找
-        if i == 0:
-            directory = File.query.filter_by(name=part, parent_id=1, user_id=user_id, is_directory=True).first()
-        else:
-            directory = File.query.filter_by(name=part, parent_id=current_directory.id, user_id=user_id, is_directory=True).first()
+   
+    #parent_id=1,
+    current_directory = File.query.filter_by(path=path,  user_id=user_id, is_directory=True).first()
+    print(f"get_directory_by_path:find the{path},result:{current_directory}")
+    # print(f"get_directory_by_path:find the path")
+    # for i, part in enumerate(parts):
+    #     # 如果这是第一部分，则在根目录中查找,8-2 修改name为path
+    #     if i == 0:
+    #         directory = File.query.filter_by(path=part, parent_id=1, user_id=user_id, is_directory=True).first()
+    #     else:
+    #         directory = File.query.filter_by(path=part, parent_id=current_directory.id, user_id=user_id, is_directory=True).first()
         
-        if not directory:
-            return None
+    #     if not directory:
+    #         return None
         
-        current_directory = directory
+    #     current_directory = directory
     
     return current_directory
 

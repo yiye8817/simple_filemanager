@@ -1,0 +1,284 @@
+{% extends "resources_manager/base.html" %}
+
+{% block content %}
+<div class="form-container">
+    <h2>添加新资源</h2>
+    <form id="addResourceForm" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="title">标题 *</label>
+            <input type="text" id="title" name="title" class="form-control" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="resource_link">资源链接 *</label>
+            <input type="url" id="resource_link" name="resource_link" class="form-control" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="category">分类 *</label>
+            <div class="category-input-group">
+                <select id="category" name="category" class="form-control" required>
+                    <option value="">选择分类</option>
+                    <option value="视频">视频</option>
+                    <option value="音频">音频</option>
+                    <option value="文档">文档</option>
+                    <option value="应用">应用</option>
+                    <option value="链接">链接</option>
+                    <option value="其他">其他</option>
+                </select>
+                <input type="text" id="categoryInput" class="form-control" placeholder="或输入新分类">
+                 <!-- MODIFIED: Changed button text and functionality -->
+                <button type="button" onclick="openFileBrowserModal()" class="btn btn-outline-secondary">从我的文件中选择</button>
+                <!-- <button type="button" onclick="loadExistingCategories()" class="btn btn-secondary">查询已有分类</button> -->
+            </div>
+            <div id="existingCategories" class="existing-categories"></div>
+        </div>
+        
+        <div class="form-group">
+            <label for="subcategory">子类</label>
+            <input type="text" id="subcategory" name="subcategory" class="form-control">
+        </div>
+        
+        <div class="form-group">
+            <label for="poster">资源海报</label>
+            <input type="file" id="poster" name="poster" class="form-control" accept="image/*">
+            <small>或者输入海报URL：</small>
+            <input type="url" id="poster_url" name="poster_url" class="form-control" placeholder="海报URL">
+        </div>
+        
+        <div class="form-group">
+            <label for="tags">特征字（标签）</label>
+            <input type="text" id="tags" name="tags" class="form-control" placeholder="用逗号分隔多个标签">
+        </div>
+        
+        <div class="form-group">
+            <label for="author">作者</label>
+            <input type="text" id="author" name="author" class="form-control">
+        </div>
+        
+        <div class="form-group">
+            <label for="source">来源</label>
+            <input type="text" id="source" name="source" class="form-control">
+        </div>
+        
+        <div class="form-group">
+            <label for="proxy">代理</label>
+            <input type="text" id="proxy" name="proxy" class="form-control">
+        </div>
+        
+        <div class="form-group">
+            <label for="rating">评分</label>
+            <input type="number" id="rating" name="rating" class="form-control" min="0" max="5" step="0.1" value="0">
+        </div>
+        
+        <div class="form-group">
+            <label for="details">详细信息</label>
+            <textarea id="details" name="details" class="form-control" rows="4"></textarea>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">添加资源</button>
+            <a href="/" class="btn btn-secondary">取消</a>
+        </div>
+    </form>
+</div>
+<!-- ============================================= -->
+<!-- ADDED: 文件浏览器模态框 (File Browser Modal)  -->
+<!-- ============================================= -->
+<div class="modal fade" id="fileBrowserModal" tabindex="-1" aria-labelledby="fileBrowserModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="fileBrowserModalLabel">选择文件</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- 文件列表将动态加载到这里 -->
+                <div id="fileListContainer">
+                    <p class="text-center">正在加载文件列表...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.getElementById('addResourceForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    
+    // 处理分类输入
+    const categorySelect = document.getElementById('category').value;
+    const categoryInput = document.getElementById('categoryInput').value;
+    formData.set('category', categoryInput || categorySelect);
+    
+    try {
+        const response = await axios.post('/api/resources', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+        
+        alert('资源添加成功！');
+        window.location.href = '/api/';
+    } catch (error) {
+        console.error('添加失败:', error);
+        alert('添加失败: ' + (error.response?.data?.error || '未知错误'));
+    }
+});
+
+async function loadExistingCategories() {
+    try {
+        const response = await axios.get('/api/categories');
+        const categories = response.data;
+        
+        const container = document.getElementById('existingCategories');
+        container.innerHTML = '<p>已有分类：</p>';
+        
+        categories.forEach(cat => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'category-tag';
+            btn.textContent = cat;
+            btn.onclick = () => {
+                document.getElementById('categoryInput').value = cat;
+            };
+            container.appendChild(btn);
+        });
+    } catch (error) {
+        console.error('加载分类失败:', error);
+    }
+}
+/**
+ * MODIFIED: 全新的函数，用于打开文件浏览器
+ */
+async function openFileBrowserModal() {
+    // 1. Get the currently selected category from the dropdown
+    const selectedCategory = document.getElementById('category').value;
+
+    // 2. Create a mapping from dropdown value (Chinese) to API path segment (English)
+    const categoryToApiType = {
+        '视频': 'videos',
+        '音频': 'audio',
+        '文档': 'documents',
+        // We can add more mappings here if needed, e.g., '图片': 'images'
+    };
+
+    // 3. Determine the correct API URL
+    let apiUrl = '/api/files/'; // Default URL for "所有文件"
+    let modalTitle = '选择文件';
+
+    const apiType = categoryToApiType[selectedCategory];
+    if (apiType) {
+        // If a specific category with a mapping is selected, use the typed URL
+        apiUrl = `/api/files/type/${apiType}`;
+        modalTitle = `选择一个${selectedCategory}文件`;
+    } else if (selectedCategory) {
+        // If a category is selected but has no specific mapping (like "应用", "链接"),
+        // we still fetch all files but can update the title.
+        modalTitle = `从所有文件中为"${selectedCategory}"分类选择`;
+    }
+
+    // Update modal title dynamically
+    document.getElementById('fileBrowserModalLabel').textContent = modalTitle;
+    
+    const fileListContainer = document.getElementById('fileListContainer');
+    fileListContainer.innerHTML = '<p class="text-center">正在加载文件列表...</p>';
+
+    const fileBrowserModal = new bootstrap.Modal(document.getElementById('fileBrowserModal'));
+    fileBrowserModal.show();
+
+    try {
+        // 4. Call the dynamically constructed API URL
+        console.log(`Requesting files from: ${apiUrl}`); // For debugging
+        const response = await axios.get(apiUrl);
+        const files = response.data.files;
+        
+        renderFileList(files);
+
+    } catch (error) {
+        console.error('加载文件列表失败:', error);
+        fileListContainer.innerHTML = '<p class="text-center text-danger">加载文件列表失败！</p>';
+    }
+}
+
+/**
+ * ADDED: 新的辅助函数，用于渲染文件列表到模态框
+ */
+function renderFileList(files) {
+    const container = document.getElementById('fileListContainer');
+    container.innerHTML = ''; // 清空加载提示
+
+    if (!files || files.length === 0) {
+        container.innerHTML = '<p class="text-center">您的云盘中没有文件。</p>';
+        return;
+    }
+
+    const list = document.createElement('div');
+    list.className = 'list-group';
+
+    files.forEach(file => {
+        const fileItem = document.createElement('a');
+        fileItem.href = '#';
+        fileItem.className = 'list-group-item list-group-item-action';
+        
+        // 根据文件类型添加图标
+        const icon = getFileIcon(file.name);
+        fileItem.innerHTML = `<i class="${icon} me-2"></i> ${file.name}`;
+        
+        fileItem.onclick = (e) => {
+            e.preventDefault();
+            selectFile(file);
+        };
+        list.appendChild(fileItem);
+    });
+
+    container.appendChild(list);
+}
+
+/**
+ * ADDED: 新的辅助函数，用于处理文件选择
+ */
+function selectFile(file) {
+    // 1. 将文件名填充到“标题”字段
+    document.getElementById('title').value = file.name;
+    console.log(file)
+
+    // 2. 构造文件访问链接并填充到“资源链接”字段
+    //    重要假设：您需要一个类似 /download/<path> 的路由来提供文件访问
+    //    我们在这里构造这个链接。请根据您的实际路由进行调整。
+    const fileUrl = `${window.location.origin}/api/download/${file.path}`; 
+    document.getElementById('resource_link').value = fileUrl;
+
+    // 3. 关闭模态框
+    const fileBrowserModalEl = document.getElementById('fileBrowserModal');
+    const modal = bootstrap.Modal.getInstance(fileBrowserModalEl);
+    modal.hide();
+}
+
+/**
+ * ADDED: 一个简单的函数，根据文件名后缀返回Bootstrap图标类
+ */
+function getFileIcon(filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    const iconMap = {
+        // Images
+        'jpg': 'bi bi-file-earmark-image', 'jpeg': 'bi bi-file-earmark-image', 'png': 'bi bi-file-earmark-image', 'gif': 'bi bi-file-earmark-image',
+        // Videos
+        'mp4': 'bi bi-file-earmark-play', 'mov': 'bi bi-file-earmark-play', 'avi': 'bi bi-file-earmark-play',
+        // Audio
+        'mp3': 'bi bi-file-earmark-music', 'wav': 'bi bi-file-earmark-music',
+        // Docs
+        'pdf': 'bi bi-file-earmark-pdf', 'doc': 'bi bi-file-earmark-word', 'docx': 'bi bi-file-earmark-word', 'xls': 'bi bi-file-earmark-excel', 'xlsx': 'bi bi-file-earmark-excel', 'ppt': 'bi bi-file-earmark-ppt', 'pptx': 'bi bi-file-earmark-ppt', 'txt': 'bi bi-file-earmark-text',
+        // Archives
+        'zip': 'bi bi-file-earmark-zip', 'rar': 'bi bi-file-earmark-zip',
+        // Default
+        'default': 'bi bi-file-earmark'
+    };
+    return iconMap[ext] || iconMap['default'];
+}
+</script>
+{% endblock %}
