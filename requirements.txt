@@ -5,3 +5,6 @@ Flask-Cors==4.0.0
 Werkzeug==2.3.7
 SQLAlchemy==2.0.23
 unidecode
+mutagen
+moviepy
+bytecode

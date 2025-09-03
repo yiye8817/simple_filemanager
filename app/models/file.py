@@ -16,6 +16,8 @@ class File(db.Model):
     parent_id = db.Column(db.Integer, db.ForeignKey('file.id'))
     is_public = db.Column(db.Boolean, default=False)
     public_share_id = db.Column(db.String(64), unique=True)
+        # 新增的Resource外键, db.ForeignKey('resources.id')
+    resource_id = db.Column(db.Integer)
     
     children = db.relationship('File', backref=db.backref('parent', remote_side=[id]), lazy=True)
     
@@ -31,9 +33,32 @@ class File(db.Model):
             'modified': self.modified_at.strftime('%Y-%m-%d %H:%M'),
             'icon': get_file_icon(self.path),
             'is_public': self.is_public,
-            'public_share_id': self.public_share_id
+            'public_share_id': self.public_share_id,
+            'resource_id':self.resource_id
         }
     
     def generate_share_id(self):
         self.public_share_id = str(uuid.uuid4())
         return self.public_share_id
+def update_file_resource(file_id, resource_id):
+    """
+    更新文件的关联资源ID
+    :param file_id: 要更新的文件ID
+    :param resource_id: 要关联的资源ID
+    :return: (success, result) 元组，success为布尔值表示是否成功
+    """
+    file = File.query.get(file_id)
+    if not file:
+        return False, "File not found"
+    
+    # resource = Resource.query.get(resource_id)
+    # if not resource:
+    #     return False, "Resource not found"
+    
+    try:
+        file.resource_id = resource_id
+        db.session.commit()
+        return True, {"file_id": file.id, "resource_id": file.resource_id}
+    except Exception as e:
+        db.session.rollback()
+        return False, f"Database error: {str(e)}"

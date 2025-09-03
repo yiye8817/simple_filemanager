@@ -1,3 +1,4 @@
+import json
 from flask import Blueprint, app, render_template, request, jsonify, session
 from flask_jwt_extended import current_user, jwt_required
 from app.models.resource import  Resource
@@ -8,6 +9,7 @@ import os
 from datetime import datetime
 
 from app.utils.decorators import login_required
+from app.models.file import update_file_resource
 #路由先直接拷贝，后面再添加用户的管控
 
 resource_bp = Blueprint('resource', __name__)
@@ -22,6 +24,7 @@ def allowed_file(filename):
     ret =  '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
     # print(f"allowed_file:{filename},{ret}")
     return ret
+
 
 @resource_bp.route('/resources', methods=['GET'])
 def get_resources():
@@ -103,7 +106,11 @@ def create_resource():
         
         db.session.add(resource)
         db.session.commit()
-        
+        #add resource
+        file_id = data.get('file_id')
+        if file_id:
+            ret = update_file_resource(file_id,resource.id)
+            print(ret)
         return jsonify({'message': '资源创建成功', 'resource': resource.to_dict()}), 201
     except Exception as e:
         db.session.rollback()
@@ -222,6 +229,44 @@ def get_categories():
         return jsonify([c[0] for c in categories if c[0]])
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+@resource_bp.route('/app/version', methods=['GET'])
+def get_app_version():
+    try:
+        package_name = request.args.get('package_name', '').strip()
+        if not package_name:
+            return jsonify({
+                'success': False,
+                'message': 'package_name parameter is required'
+            }), 400
+
+        # 查询category为"应用"且details包含包名的记录
+        app = Resource.query.filter(
+            Resource.category == '应用',
+            #使用tags来做基本新的描述detail to tags 8-20
+            Resource.tags.like(f'%"package": "{package_name}"%')
+        ).first()
+
+        if not app:
+            return jsonify({
+                'success': False,
+                'message': f'No app found with package: {package_name}'
+            }), 404
+
+        # 解析details中的版本信息
+        tags = json.loads(app.tags)
+        result_version = tags['version_code']
+        return jsonify({
+            'success': True,
+            'package': package_name,
+            'version': result_version,
+            # 'count': len(results)
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error: {str(e)}'
+        }), 500
 #将网页的接口附到资源路由的最后,拷贝模板文件到创建的目录中来
 #拷贝js和css,重命令并修改base.html的引用路径
 #暂时考虑内容不分用户，后续再改

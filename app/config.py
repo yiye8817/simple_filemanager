@@ -8,6 +8,7 @@ class Config:
     JWT_SECRET_KEY = '44332211'
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=1)
     UPLOAD_FOLDER = 'uploads'
+    THUMBNAIL_FOLDER = 'thumbnails'
     MAX_STORAGE_GB = 10  # 10GB 最大存储空间
         # 主数据库配置（词汇数据库）
     # SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///vocabulary.db'

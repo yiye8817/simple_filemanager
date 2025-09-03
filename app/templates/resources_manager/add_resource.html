@@ -24,6 +24,7 @@
                     <option value="文档">文档</option>
                     <option value="应用">应用</option>
                     <option value="链接">链接</option>
+                    <option value="压缩包">压缩包</option>
                     <option value="其他">其他</option>
                 </select>
                 <input type="text" id="categoryInput" class="form-control" placeholder="或输入新分类">
@@ -103,8 +104,13 @@
             </div>
         </div>
     </div>
+    <!-- 加一个加载指示器 yiye-->
+    <div id="preview-loading" class="spinner-border spinner-border-sm" role="status" style="display: none;">
+        <span class="visually-hidden">Loading...</span>
+    </div>
 </div>
 <script>
+var gFileId = -1;
 document.getElementById('addResourceForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -114,7 +120,8 @@ document.getElementById('addResourceForm').addEventListener('submit', async (e) 
     const categorySelect = document.getElementById('category').value;
     const categoryInput = document.getElementById('categoryInput').value;
     formData.set('category', categoryInput || categorySelect);
-    
+    formData.set('file_id',gFileId)
+    console.log(formData)
     try {
         const response = await axios.post('/api/resources', formData, {
             headers: {
@@ -160,10 +167,14 @@ async function openFileBrowserModal() {
     const selectedCategory = document.getElementById('category').value;
 
     // 2. Create a mapping from dropdown value (Chinese) to API path segment (English)
+    //需要和文件上传的内容一致，否则不能按照分类查询
     const categoryToApiType = {
         '视频': 'videos',
         '音频': 'audio',
         '文档': 'documents',
+        '图片': 'images',
+        '应用': 'apk',
+        '压缩包':'archives'
         // We can add more mappings here if needed, e.g., '图片': 'images'
     };
 
@@ -204,6 +215,7 @@ async function openFileBrowserModal() {
         fileListContainer.innerHTML = '<p class="text-center text-danger">加载文件列表失败！</p>';
     }
 }
+let clickTimer = null;
 
 /**
  * ADDED: 新的辅助函数，用于渲染文件列表到模态框
@@ -230,9 +242,18 @@ function renderFileList(files) {
         fileItem.innerHTML = `<i class="${icon} me-2"></i> ${file.name}`;
         
         fileItem.onclick = (e) => {
-            e.preventDefault();
-            selectFile(file);
+            clearTimeout(clickTimer);
+            clickTimer = setTimeout(() => {
+                // console.log("onclick");
+                selectFile(file);
+            }, 200); // 200ms内没有第二次点击才执行单击
         };
+        fileItem.ondblclick = (e) =>{
+            e.preventDefault();
+            clearTimeout(clickTimer); // 清除单击的定时器
+            // console.log("ondbclick")
+            selectFile(file,true);
+        }
         list.appendChild(fileItem);
     });
 
@@ -242,10 +263,11 @@ function renderFileList(files) {
 /**
  * ADDED: 新的辅助函数，用于处理文件选择
  */
-function selectFile(file) {
+function selectFile0(file,is_dbclick=false) {
     // 1. 将文件名填充到“标题”字段
     document.getElementById('title').value = file.name;
     console.log(file)
+    console.log(is_dbclick)
 
     // 2. 构造文件访问链接并填充到“资源链接”字段
     //    重要假设：您需要一个类似 /download/<path> 的路由来提供文件访问
@@ -258,7 +280,82 @@ function selectFile(file) {
     const modal = bootstrap.Modal.getInstance(fileBrowserModalEl);
     modal.hide();
 }
+// 将函数声明为 async 异步函数
+async function selectFile(file, is_dbclick = false) {
+    // 1. 填充基本信息
+    document.getElementById('title').value = file.name;
+    const fileUrl = `${window.location.origin}/api/download/${file.path}`;
+    document.getElementById('resource_link').value = fileUrl;
+    
+    // 清空并准备预览区域
+    const thumbnailEl = document.getElementById('poster_url');
+    const detailsEl = document.getElementById('details');
+    const tagsEl = document.getElementById('tags');
+    const loadingEl = document.getElementById('preview-loading');
 
+    // thumbnailEl.style.display = 'none';
+    // thumbnailEl.src = '';
+    // detailsEl.textContent = '';
+    // categoryEl.value = '';
+    loadingEl.style.display = 'block'; // 显示加载指示器
+    //记录全局变量为file id
+    gFileId = file.id
+    try {
+        // 2. 新增：向后端发送请求以解析文件信息
+        const response = await fetch('/api/parse_file_info', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            // 发送文件相对路径给后端
+            body: JSON.stringify({ path: file.path,is_dbclick:is_dbclick,id:file.id }) 
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || '解析文件失败');
+        }
+
+        const data = await response.json();
+
+        // 3. 使用后端返回的数据更新前端UI
+       
+
+        if (data.thumbnail_url) {
+               // 检查是否是完整链接（以 http:// 或 https:// 开头）
+            if (!data.thumbnail_url.startsWith('http://') && !data.thumbnail_url.startsWith('https://')) {
+                // 获取当前页面的 host 和 protocol
+                const protocol = window.location.protocol;
+                const host = window.location.host;
+                // 添加 host 和 protocol 到 thumbnail_url
+                thumbnailEl.value = `${protocol}//${host}${data.thumbnail_url.startsWith('/') ? '' : '/'}${data.thumbnail_url}`;
+            } else {
+                thumbnailEl.value = data.thumbnail_url;
+            }
+            // thumbnailEl.style.display = 'block';
+        }
+
+        if (data.details) {
+            // 将详细信息格式化为 JSON 字符串进行显示
+            // if (data.category == "apk")
+            tagsEl.textContent = JSON.stringify(data.details, null, 2);
+            // else:
+             
+            //     tagsEl.value = data.details.version_name;
+        }
+
+    } catch (error) {
+        console.error('Error fetching file info:', error);
+        detailsEl.textContent = `加载预览信息失败: ${error.message}`;
+    } finally {
+        loadingEl.style.display = 'none'; // 隐藏加载指示器
+    }
+
+    // 4. 关闭模态框 (最后执行)
+    const fileBrowserModalEl = document.getElementById('fileBrowserModal');
+    const modal = bootstrap.Modal.getInstance(fileBrowserModalEl);
+    modal.hide();
+}
 /**
  * ADDED: 一个简单的函数，根据文件名后缀返回Bootstrap图标类
  */

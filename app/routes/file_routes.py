@@ -1,3 +1,4 @@
+import json
 import logging
 import math
 import mimetypes
@@ -5,13 +6,14 @@ import os
 import shutil
 from flask import Blueprint, app, current_app, flash, redirect, render_template, request, jsonify, session, send_file, abort, url_for
 from app.utils.decorators import login_required, api_key_required
-from app.utils.helpers import FILE_TYPES, get_directory_by_path
+from app.utils.helpers import FILE_TYPES, get_directory_by_path, get_file_details, parse_apk
 from app.models import File, User
 from app import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta, timezone
 from unidecode import unidecode
+from app.models.resource import get_resource_poster, update_resource_fields
 file_bp = Blueprint('file', __name__)
 logger = logging.getLogger(__name__)
 # 主页路由
@@ -181,7 +183,7 @@ def upload_file():
     print(f"curren_path:{current_path}")
     # 检查当前路径是否有效
     parent = None
-    if current_path:
+    if current_path or current_path == '':
         parent = get_directory_by_path(current_path, user_id)
         if not parent:
             # parent = current_path
@@ -209,12 +211,18 @@ def upload_file():
             # 确保文件名不重复
             base_name, extension = os.path.splitext(filename)
             # file_type = get_file_type_info(extension)
-            counter = 1
+            # counter = 1
             #修改name->path,8-2
-            while File.query.filter_by(path=filename, parent_id=parent.id if parent else None, user_id=user_id).first():
-                filename = f"{base_name}_{counter}{extension}"
-                counter += 1
-            
+            # while File.query.filter_by(path=filename, parent_id=parent.id if parent else None, user_id=user_id).first():
+            #     # filename = f"{base_name}_{counter}{extension}"
+            #     counter += 1
+            existing_file = File.query.filter_by(
+                            path=filename,
+                            parent_id=parent.id if parent else None,
+                            user_id=user_id
+                            ).first()
+                
+            print(f"find exist:{filename},count:{existing_file},{parent.id}")
             # 创建文件记录
             file_size = 0
             #查询文件的分类是否存在，如果不存在则创建对应的文件夹
@@ -232,19 +240,30 @@ def upload_file():
             # 保存文件
             file.save(physical_path)
             file_size = os.path.getsize(physical_path)
-            
-            # 创建数据库记录
-            new_file = File(
-                name=filename0,
-                path=file_path,
-                size=file_size,
-                file_type=get_file_type(filename),
-                is_directory=False,
-                user_id=user_id,
-                parent_id=parent.id if parent else 1
-            )
-            
-            db.session.add(new_file)
+            if existing_file:
+                   # 如果文件已存在（可能是由于并发操作），更新 size 和 modified_at
+                existing_file.size = file_size
+                existing_file.modified_at = datetime.utcnow()
+                new_file = existing_file
+                #上传apk,更新apk的信息,后面new一个线程进行更新
+                if get_file_type(filename) == 'apk':
+                    print("update apk,info")
+                    json_apkinfo = parse_apk(physical_path)
+                    if existing_file.resource_id :
+                        update_resource_fields(existing_file.resource_id,tags=json_apkinfo.get('details'))
+            else:
+                # 创建数据库记录
+                new_file = File(
+                    name=filename0,
+                    path=file_path,
+                    size=file_size,
+                    file_type=get_file_type(filename),
+                    is_directory=False,
+                    user_id=user_id,
+                    parent_id=parent.id if parent else 1
+                )
+                
+                db.session.add(new_file)
             db.session.commit()
             
             uploaded_files.append(new_file.to_dict())
@@ -324,7 +343,134 @@ def external_upload_file():
         })
     
     return jsonify({'error': '上传失败'}), 400
-
+#添加保存文件的接口:8-12 yiye
+@file_bp.route('/api/save-file', methods=['POST'])
+@login_required
+def save_file():
+    """保存编辑后的文件内容"""
+    user_id = session.get('user_id')
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({'error': '用户不存在'}), 404
+    
+    # 获取请求数据
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': '请求数据无效'}), 400
+    
+    file_path = data.get('path')
+    content = data.get('content')
+    parent_path=data.get('parent_path')
+    print(f"save-file:{user_id}->{parent_path+"/"+file_path}-{content}")
+    file_path = parent_path+"/"+file_path
+    if not file_path:
+        return jsonify({'error': '文件路径不能为空'}), 400
+    
+    if content is None:  # 允许空内容
+        return jsonify({'error': '文件内容不能为空'}), 400
+    
+    # 去除开始的绝对路径
+    if file_path.startswith('/'):
+        file_path = file_path[1:]
+    
+    # 查询文件记录
+    file_record = File.query.filter_by(
+        path=file_path,
+        user_id=user_id,
+        is_directory=False
+    ).first()
+    
+    if not file_record:
+        return jsonify({'error': '文件不存在或无权限访问'}), 404
+    
+    # 检查文件类型是否支持编辑（只允许编辑文本类文件）
+    editable_extensions = ['.txt', '.md', '.json', '.xml', '.html', '.css', '.js', 
+                          '.py', '.java', '.c', '.cpp', '.php', '.rb', '.go', 
+                          '.sh', '.bat', '.yml', '.yaml', '.ini', '.conf', '.log']
+    
+    file_extension = os.path.splitext(file_path)[1].lower()
+    if file_extension not in editable_extensions:
+        return jsonify({'error': '该文件类型不支持编辑'}), 400
+    
+    # 构建物理路径
+    physical_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(user_id), file_path)
+    
+    # 检查文件是否存在
+    if not os.path.exists(physical_path):
+        return jsonify({'error': '文件不存在'}), 404
+    
+    try:
+        # 备份原文件（可选）
+        backup_path = physical_path + '.backup'
+        import shutil
+        shutil.copy2(physical_path, backup_path)
+        
+        # 将内容编码为字节并保存
+        content_bytes = content.encode('utf-8')
+        
+        # 检查新内容大小是否超出限制
+        new_size = len(content_bytes)
+        old_size = file_record.size
+        size_diff = new_size - old_size
+        
+        # 检查存储空间
+        if size_diff > 0:  # 文件变大了
+            current_usage = get_user_storage_usage(user_id)
+            max_storage = current_app.config['MAX_STORAGE_GB'] * 1024 * 1024 * 1024
+            
+            if current_usage + size_diff > max_storage:
+                # 删除备份文件
+                if os.path.exists(backup_path):
+                    os.remove(backup_path)
+                return jsonify({'error': '存储空间不足'}), 400
+        
+        # 保存文件
+        with open(physical_path, 'wb') as f:
+            f.write(content_bytes)
+        
+        # 更新数据库记录
+        file_record.size = new_size
+        file_record.updated_at = datetime.utcnow()
+        
+        # 添加版本记录（可选）
+        if hasattr(file_record, 'version'):
+            file_record.version = (file_record.version or 0) + 1
+        
+        db.session.commit()
+        
+        # 删除备份文件（成功保存后）
+        if os.path.exists(backup_path):
+            os.remove(backup_path)
+        
+        return jsonify({
+            'success': True,
+            'message': '文件保存成功',
+            'file': {
+                'name': file_record.name,
+                'path': file_record.path,
+                'size': file_record.size,
+                # 'size_formatted': format_file_size(file_record.size),
+                'updated_at': file_record.updated_at.isoformat() if file_record.updated_at else None
+            }
+        })
+        
+    except UnicodeDecodeError:
+        return jsonify({'error': '文件编码错误，无法保存'}), 400
+    except IOError as e:
+        # 如果保存失败，尝试恢复备份
+        backup_path = physical_path + '.backup'
+        if os.path.exists(backup_path):
+            try:
+                shutil.copy2(backup_path, physical_path)
+                os.remove(backup_path)
+            except:
+                pass
+        
+        return jsonify({'error': f'文件保存失败: {str(e)}'}), 500
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'保存失败: {str(e)}'}), 500
 # 创建文件夹
 @file_bp.route('/api/folder/create', methods=['POST'])
 @login_required
@@ -336,6 +482,8 @@ def create_folder():
     current_path = data.get('path', '')
     if current_path.startswith('/'):
         current_path=current_path[1:]
+    # if current_path == '':
+    #     current_path
     print(f"/api/folder/create => {folder_name},{current_path}")
     if not folder_name:
         return jsonify({'error': '文件夹名称不能为空'}), 400
@@ -343,7 +491,7 @@ def create_folder():
     folder_name = unidecode(folder_name)  # 转换为英文字符，减少安全问题
     # 确保文件夹名称有效
     folder_name = secure_filename(folder_name)
-    
+    print(f"folder_name:{folder_name}")
     # 检查当前路径是否有效
     parent = None
     if current_path:
@@ -761,8 +909,20 @@ def new_file():
         #  physical_path = os.path.join(app.config['UPLOAD_FOLDER'], str(user.id), file.path)
         # 生成文件路径
         file_name = data['name']
+        parent_path = data['parent_id']
+        if parent_path == '':
+            parent_path='/'
+        print(f"new_file @{parent_path}:{file_name}")
         # file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4()}_{file_name}")
-        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(user_id),file_name)
+        file = File.query.filter_by(path=parent_path, user_id=user_id).first()
+        parent_id = file.id
+        print(f"parent_id:{parent_id}")
+        if parent_path== '/':
+            tpath = file_name
+        else:
+            tpath = parent_path+"/"+file_name
+        file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(user_id),tpath)
+
         
         # 将内容写入文件
         with open(file_path, 'w', encoding='utf-8') as f:
@@ -774,12 +934,12 @@ def new_file():
         # 创建文件记录
         new_file = File(
             name=file_name,
-            path=file_name,
+            path=tpath,
             size=file_size,
             file_type=data['file_type'],
             is_directory=False,
             user_id=user_id,
-            parent_id=1,
+            parent_id=parent_id,
             is_public=False
         )
         
@@ -789,7 +949,8 @@ def new_file():
         return jsonify({
             'success': True, 
             'message': '文件创建成功',
-            'file_id': new_file.id
+            'file_id': new_file.id,
+            'parent_path':parent_path
         })
         
     except Exception as e:
@@ -874,6 +1035,7 @@ def get_directory_by_path(path:str, user_id):
     parts = [p for p in path.split('/') if p]
     
     if not parts:
+        print(f"get_directory_by_path:{parts}")
         #add 根目录作为有效目录
         return File.query.filter_by(
             parent_id=0, 
@@ -941,7 +1103,12 @@ def get_file_type(filename):
     
     # return '其它'
 
-def get_file_icon(path):
+def get_file_icon(path,file=None):
+    # if file.id 
+    if file.resource_id:
+        T,path= get_resource_poster(file.resource_id)
+        if T:
+            return path
     """获取文件图标"""
     if path.startswith("http://") or  path.startswith("https://"):
         return 'bi-link-45deg'
@@ -999,3 +1166,227 @@ def format_size(size):
     
     size = size / (1024 ** i)
     return f"{size:.2f} {units[i]}"
+@file_bp.route('/api/parse_file_info', methods=['POST'])
+@login_required
+def parse_file_info():
+    """API端点，用于解析文件并返回信息"""
+    data = request.get_json()
+    if not data or 'path' not in data:
+        return jsonify({'error': '请求体中缺少 "path" 字段'}), 400
+    user_id = session.get('user_id')
+    relative_path = data['path']
+    #双击生成视频的最后一帧
+    is_dbclick = data['is_dbclick']
+    file_id = data.get('id')
+    print(f"pparse_file_info:{relative_path}:{is_dbclick}:{file_id}")
+    try:
+        file_details = get_file_details(relative_path,user_id,is_dbclick,file_id)
+
+        return jsonify(file_details)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 403 # 403 Forbidden for illegal path
+    except FileNotFoundError as e:
+        return jsonify({'error': str(e)}), 404 # 404 Not Found
+    except Exception as e:
+        # 捕获所有其他意外错误
+        print(f"Unhandled error in parse_file_info: {e}")
+        return jsonify({'error': '服务器内部错误，无法解析文件'}), 500
+ # 添加断点续传相关路由
+@file_bp.route('/api/upload/check', methods=['POST'])
+@login_required
+def check_breakpoint():
+    """检查文件断点信息"""
+    user_id = session.get('user_id')
+    data = request.json
+    
+    file_name = data.get('fileName')
+    file_size = data.get('fileSize')
+    file_hash = data.get('fileHash')
+    path = data.get('path', '')
+    
+    # 构建临时文件路径
+    temp_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'temp', str(user_id), file_hash)
+    
+    uploaded_chunks = []
+    uploaded_bytes = 0
+    
+    if os.path.exists(temp_dir):
+        # 获取已上传的分片
+        for chunk_file in os.listdir(temp_dir):
+            if chunk_file.startswith('chunk_'):
+                chunk_index = int(chunk_file.split('_')[1])
+                uploaded_chunks.append(chunk_index)
+                chunk_path = os.path.join(temp_dir, chunk_file)
+                uploaded_bytes += os.path.getsize(chunk_path)
+    
+    return jsonify({
+        'uploadedChunks': uploaded_chunks,
+        'uploadedBytes': uploaded_bytes,
+        'fileHash': file_hash
+    })
+
+@file_bp.route('/api/upload/chunk', methods=['POST'])
+@login_required
+def upload_chunk():
+    """上传文件分片"""
+    user_id = session.get('user_id')
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({'error': '用户不存在'}), 404
+    
+    chunk = request.files.get('chunk')
+    chunk_index = int(request.form.get('chunkIndex'))
+    chunks = int(request.form.get('chunks'))
+    file_name = request.form.get('fileName')
+    file_hash = request.form.get('fileHash')
+    path = request.form.get('path', '')
+    
+    if not chunk:
+        return jsonify({'error': '分片数据不存在'}), 400
+    
+    # 创建临时目录存储分片
+    temp_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'temp', str(user_id), file_hash)
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    # 保存分片
+    chunk_path = os.path.join(temp_dir, f'chunk_{chunk_index}')
+    chunk.save(chunk_path)
+    
+    # 记录分片信息
+    info_file = os.path.join(temp_dir, 'info.json')
+    info = {}
+    if os.path.exists(info_file):
+        with open(info_file, 'r') as f:
+            info = json.load(f)
+    
+    info.update({
+        'fileName': file_name,
+        'chunks': chunks,
+        'path': path,
+        'fileHash': file_hash,
+        'lastUpdate': datetime.utcnow().isoformat()
+    })
+    
+    with open(info_file, 'w') as f:
+        json.dump(info, f)
+    
+    return jsonify({
+        'success': True,
+        'chunkIndex': chunk_index,
+        'message': f'分片 {chunk_index + 1}/{chunks} 上传成功'
+    })
+
+@file_bp.route('/api/upload/merge', methods=['POST'])
+@login_required
+def merge_chunks():
+    """合并文件分片"""
+    user_id = session.get('user_id')
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({'error': '用户不存在'}), 404
+    
+    data = request.json
+    file_name = data.get('fileName')
+    file_hash = data.get('fileHash')
+    chunks = data.get('chunks')
+    path = data.get('path', '')
+    file_size = data.get('fileSize')
+    
+    # 检查存储空间
+    current_usage = get_user_storage_usage(user_id)
+    max_storage = current_app.config['MAX_STORAGE_GB'] * 1024 * 1024 * 1024
+    
+    if current_usage + file_size > max_storage:
+        return jsonify({'error': '存储空间不足'}), 400
+    
+    # 临时目录路径
+    temp_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'temp', str(user_id), file_hash)
+    
+    if not os.path.exists(temp_dir):
+        return jsonify({'error': '分片文件不存在'}), 404
+    
+    # 检查所有分片是否都已上传
+    for i in range(chunks):
+        chunk_path = os.path.join(temp_dir, f'chunk_{i}')
+        if not os.path.exists(chunk_path):
+            return jsonify({'error': f'分片 {i} 不存在'}), 400
+    
+    # 处理文件路径
+    if path.startswith('/'):
+        path = path[1:]
+    
+    # 获取父目录
+    parent = None
+    if path or path == '':
+        parent = get_directory_by_path(path, user_id)
+        if not parent:
+            return jsonify({'error': '上传目录不存在'}), 404
+    
+    # 安全的文件名处理
+    filename0 = file_name
+    filename = unidecode(file_name)
+    filename = secure_filename(filename)
+    
+    # 构建最终文件路径
+    file_path = os.path.join(path, filename) if path else filename
+    if file_path.startswith("/"):
+        file_path = file_path[1:]
+    
+    physical_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(user_id), file_path)
+    
+    # 确保目录存在
+    os.makedirs(os.path.dirname(physical_path), exist_ok=True)
+    
+    # 合并分片
+    with open(physical_path, 'wb') as output_file:
+        for i in range(chunks):
+            chunk_path = os.path.join(temp_dir, f'chunk_{i}')
+            with open(chunk_path, 'rb') as chunk_file:
+                output_file.write(chunk_file.read())
+    
+    # 验证文件大小
+    actual_size = os.path.getsize(physical_path)
+    
+    # 清理临时文件
+    shutil.rmtree(temp_dir)
+    
+    # 检查文件是否已存在于数据库
+    existing_file = File.query.filter_by(
+        path=filename,
+        parent_id=parent.id if parent else None,
+        user_id=user_id
+    ).first()
+    
+    if existing_file:
+        # 更新现有文件
+        existing_file.size = actual_size
+        existing_file.modified_at = datetime.utcnow()
+        new_file = existing_file
+        
+        # 处理APK文件
+        if get_file_type(filename) == 'apk':
+            json_apkinfo = parse_apk(physical_path)
+            if existing_file.resource_id:
+                update_resource_fields(existing_file.resource_id, tags=json_apkinfo.get('details'))
+    else:
+        # 创建新文件记录
+        new_file = File(
+            name=filename0,
+            path=file_path,
+            size=actual_size,
+            file_type=get_file_type(filename),
+            is_directory=False,
+            user_id=user_id,
+            parent_id=parent.id if parent else 1
+        )
+        db.session.add(new_file)
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'file': new_file.to_dict(),
+        'message': '文件上传成功'
+    })   
