@@ -136,7 +136,7 @@ function updatePagination() {
 function deleteResource(id) {
     if (!confirm('确定要删除这个资源吗？')) return;
     
-    axios.delete(`/api/resources/${id}`)
+    axios.delete(`/api/resources/${id}?file_id=`)
         .then(() => {
             alert('删除成功');
             loadResources(currentPage);

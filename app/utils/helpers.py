@@ -2,7 +2,7 @@ import os
 import math
 import mimetypes
 import hashlib
-from flask import Flask, current_app, request, jsonify, send_from_directory
+from flask import Flask, current_app, request, jsonify, send_file, send_from_directory
 from PIL import Image
 from moviepy import VideoFileClip
 from mutagen.mp3 import MP3
@@ -74,7 +74,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads') # 存放用户上传文件的目录
 THUMBNAIL_FOLDER = os.path.join(BASE_DIR, 'static', 'thumbnails') # 存放缩略图的目录
 STATIC_ICON_FOLDER = '/static/icons/' # 存放通用图标的Web路径
-def get_file_details(relative_path,user_id,is_dbclick):
+def get_file_details(relative_path,user_id,is_dbclick,file_id):
     """根据文件类型调用不同的解析器"""
     
     # 安全性检查：防止目录遍历攻击
@@ -286,3 +286,14 @@ def parse_document(full_path, relative_path):
         'thumbnail_url': f'{STATIC_ICON_FOLDER}{icon_name}',
         'details': {'filename': os.path.basename(relative_path)}
     }
+#增加下载文件的接口，方便file里减少代码
+def download_file_from(user_id,file):
+    physical_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(user_id), file.path)
+    print(f"external_download_file:{user_id,file,physical_path}")
+    if not os.path.exists(physical_path):
+        return jsonify({'error': '文件不存在'}), 404
+    
+    if file.is_directory:
+        return jsonify({'error': '不支持下载整个目录，请指定具体文件'}), 400
+    
+    return send_file(physical_path, as_attachment=True, download_name=file.name)

@@ -6,7 +6,7 @@ import os
 import shutil
 from flask import Blueprint, app, current_app, flash, redirect, render_template, request, jsonify, session, send_file, abort, url_for
 from app.utils.decorators import login_required, api_key_required
-from app.utils.helpers import FILE_TYPES, get_directory_by_path, get_file_details, parse_apk
+from app.utils.helpers import FILE_TYPES, download_file_from, get_directory_by_path, get_file_details, parse_apk
 from app.models import File, User
 from app import db
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -14,6 +14,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta, timezone
 from unidecode import unidecode
 from app.models.resource import get_resource_poster, update_resource_fields
+from app.services.file_service import FileService
 file_bp = Blueprint('file', __name__)
 logger = logging.getLogger(__name__)
 # 主页路由
@@ -29,14 +30,24 @@ def index():
 @login_required
 def get_files(path):
     user_id = session.get('user_id')
-    print(f"get_files in:{path}")
     
+    query_param = request.args.get('query')  # 返回 'remain' 或 None
+    print(f"get_files in:{path,query_param}")
     if path.startswith("type/"):
         path = path[5:]
         if path in FILE_TYPES.keys():
             files = File.query.filter_by(user_id=user_id, file_type=path).all()
+            if(query_param == 'remain'):#增加过滤已经添加过程的
+                ret_fs=[]
+                for f in files:
+                    print(f.resource_id)
+                    if not f.resource_id:
+                        ret_fs.append(f)
+            else:
+                ret_fs = files
+            
             return jsonify({
-                'files': [file.to_dict() for file in files],
+                'files': [file.to_dict() for file in ret_fs],
                 'current_path': path
             })
     
@@ -237,6 +248,10 @@ def upload_file():
             # 确保目录存在
             os.makedirs(os.path.dirname(physical_path), exist_ok=True)
             
+            #如果该文件有版本管理
+            if existing_file and  len(existing_file.version_str)!=0:
+                print(f'cp file to backup,by version {existing_file.version_str}')
+                FileService.backup_file(physical_path,existing_file.version_str)
             # 保存文件
             file.save(physical_path)
             file_size = os.path.getsize(physical_path)
@@ -251,6 +266,11 @@ def upload_file():
                     json_apkinfo = parse_apk(physical_path)
                     if existing_file.resource_id :
                         update_resource_fields(existing_file.resource_id,tags=json_apkinfo.get('details'))
+                #如果该文件有版本管理
+                # if existing_file.version_id>0:
+                #     print('cp file to backup,by version id')
+
+                #     pass
             else:
                 # 创建数据库记录
                 new_file = File(
@@ -519,7 +539,7 @@ def create_folder():
         file_type='文件夹',
         is_directory=True,
         user_id=user_id,
-        parent_id=parent.id if parent else None
+        parent_id=parent.id if parent else 1
     )
     
     db.session.add(new_folder)
@@ -642,6 +662,20 @@ def download_file_by_path(path):
         abort(404)
     
     return download_file_by_id(file.id)
+@file_bp.route('/api/external/download/<path:path>')
+# @login_required
+def ex_download_file_by_path(path):
+    user_id =  request.args.get('user_id')
+    version = request.args.get('version')
+    file = get_file_by_path(path, user_id)
+    print(f"download {user_id}==>{version} by version:{path}")
+    if not file:
+        abort(404)
+   
+    if file.version_str == version:
+        return download_file_from(user_id,file)
+    else:
+        return jsonify({'msg':"input args error :user_id,version must"})
 
 # 文件预览
 @file_bp.route('/api/preview/<int:file_id>')
@@ -1338,7 +1372,16 @@ def merge_chunks():
     
     # 确保目录存在
     os.makedirs(os.path.dirname(physical_path), exist_ok=True)
-    
+     # 检查文件是否已存在于数据库
+    existing_file = File.query.filter_by(
+        path=filename,
+        parent_id=parent.id if parent else None,
+        user_id=user_id
+    ).first()
+    #如果该文件有版本管理
+    if existing_file and  len(existing_file.version_str)!=0:
+        print(f'cp largefile to backup,by version {existing_file.version_str}')
+        FileService.backup_file(physical_path,existing_file.version_str)
     # 合并分片
     with open(physical_path, 'wb') as output_file:
         for i in range(chunks):
@@ -1352,12 +1395,7 @@ def merge_chunks():
     # 清理临时文件
     shutil.rmtree(temp_dir)
     
-    # 检查文件是否已存在于数据库
-    existing_file = File.query.filter_by(
-        path=filename,
-        parent_id=parent.id if parent else None,
-        user_id=user_id
-    ).first()
+   
     
     if existing_file:
         # 更新现有文件

@@ -185,7 +185,7 @@ async function openFileBrowserModal() {
     const apiType = categoryToApiType[selectedCategory];
     if (apiType) {
         // If a specific category with a mapping is selected, use the typed URL
-        apiUrl = `/api/files/type/${apiType}`;
+        apiUrl = `/api/files/type/${apiType}?query=remain`;
         modalTitle = `选择一个${selectedCategory}文件`;
     } else if (selectedCategory) {
         // If a category is selected but has no specific mapping (like "应用", "链接"),
@@ -272,7 +272,7 @@ function selectFile0(file,is_dbclick=false) {
     // 2. 构造文件访问链接并填充到“资源链接”字段
     //    重要假设：您需要一个类似 /download/<path> 的路由来提供文件访问
     //    我们在这里构造这个链接。请根据您的实际路由进行调整。
-    const fileUrl = `${window.location.origin}/api/download/${file.path}`; 
+    const fileUrl = `${window.location.origin}/api/external/download/${file.path}?user_id=1`; 
     document.getElementById('resource_link').value = fileUrl;
 
     // 3. 关闭模态框
@@ -284,7 +284,7 @@ function selectFile0(file,is_dbclick=false) {
 async function selectFile(file, is_dbclick = false) {
     // 1. 填充基本信息
     document.getElementById('title').value = file.name;
-    const fileUrl = `${window.location.origin}/api/download/${file.path}`;
+    const fileUrl = `${window.location.origin}/api/external/download/${file.path}?user_id=1`;
     document.getElementById('resource_link').value = fileUrl;
     
     // 清空并准备预览区域

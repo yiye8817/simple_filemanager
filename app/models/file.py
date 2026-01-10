@@ -18,6 +18,8 @@ class File(db.Model):
     public_share_id = db.Column(db.String(64), unique=True)
         # 新增的Resource外键, db.ForeignKey('resources.id')
     resource_id = db.Column(db.Integer)
+    #添加版本管理字段
+    version_str = db.Column(db.String(16))
     
     children = db.relationship('File', backref=db.backref('parent', remote_side=[id]), lazy=True)
     
@@ -34,12 +36,30 @@ class File(db.Model):
             'icon': get_file_icon(self.path),
             'is_public': self.is_public,
             'public_share_id': self.public_share_id,
-            'resource_id':self.resource_id
+            'resource_id':self.resource_id,
+            'version_str':self.version_str
         }
     
     def generate_share_id(self):
         self.public_share_id = str(uuid.uuid4())
         return self.public_share_id
+#更新文件管理版本
+def update_file_version(file_id,version_str):
+    file = File.query.get(file_id)
+    if not file:
+        return False, "File not found"
+    
+    # resource = Resource.query.get(resource_id)
+    # if not resource:
+    #     return False, "Resource not found"
+    
+    try:
+        file.version_str = version_str
+        db.session.commit()
+        return True, {"file_id": file.id, "version_str": file.version_str}
+    except Exception as e:
+        db.session.rollback()
+        return False, f"Database error: {str(e)}"
 def update_file_resource(file_id, resource_id):
     """
     更新文件的关联资源ID
@@ -62,3 +82,23 @@ def update_file_resource(file_id, resource_id):
     except Exception as e:
         db.session.rollback()
         return False, f"Database error: {str(e)}"
+def reset_resource_id(resource_id):
+    """
+    批量更新指定resource_id的File记录为0
+    
+    :param resource_id: 要查询的resource_id
+    :return: 更新的记录数量
+    """
+    try:
+        # 使用update方法批量更新
+        updated_count = File.query.filter_by(resource_id=resource_id).update(
+            {'resource_id': 0}
+        )
+        
+        db.session.commit()
+        return updated_count
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error: {e}")
+        return -1

@@ -908,7 +908,9 @@ function renderFiles(files) {
                     `<li><a class="dropdown-item" href="#" onclick="unshareFile(${file.id})"><i class="bi bi-x-circle me-2"></i>取消分享</a></li>` : 
                     `<li><a class="dropdown-item" href="#" onclick="shareFile(${file.id})"><i class="bi bi-share me-2"></i>分享</a></li>`
                 }
+                <li><a class="dropdown-item" href="#" onclick='openVersionModal(${JSON.stringify(file).replace(/'/g, "&apos;")})'><i class="bi bi-download me-2"></i>版本管理</a></li>
                 <li><hr class="dropdown-divider"></li>
+
                 <li><a class="dropdown-item text-danger" href="#" onclick="deleteSelectedFiles()"><i class="bi bi-trash me-2"></i>删除</a></li>
             </ul>
         `;

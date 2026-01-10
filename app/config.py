@@ -9,7 +9,10 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=1)
     UPLOAD_FOLDER = 'uploads'
     THUMBNAIL_FOLDER = 'thumbnails'
-    MAX_STORAGE_GB = 10  # 10GB 最大存储空间
+    #版本管理的文件备份路径
+    BACKUP_FOLDER='vm_backup'
+    MAX_STORAGE_GB = 100  # 100GB 最大存储空间
+
         # 主数据库配置（词汇数据库）
     # SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///vocabulary.db'
     
@@ -18,6 +21,8 @@ class Config:
         'vocabulary': os.environ.get('VOCABULARY_DB_URL') or 'sqlite:///vocabulary.db',
         #增加resources_manager的数据库到file_manager工程中来
         'resources_manager': os.environ.get('SRCS_MANAGER_DB_URL') or 'sqlite:///resources_manager.db',
+         #增加version_manager的数据库到file_manager工程中来,step 1,--> copy model 到数据model下并修改
+        'version_manager': os.environ.get('SRCS_VER_MANAGER_DB_URL') or 'sqlite:///version_manager.db',
         # 'users': os.environ.get('USERS_DB_URL') or 'sqlite:///users.db',
         # 'analytics': os.environ.get('ANALYTICS_DB_URL') or 'sqlite:///analytics.db',
         # 'cache': os.environ.get('CACHE_DB_URL') or 'sqlite:///cache.db'

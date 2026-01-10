@@ -8,8 +8,11 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- 增加版本管理 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='version_manager/css/style.css') }}">
     <!-- 添加断点续传的支持 -->
     <script src="https://cdn.jsdelivr.net/npm/spark-md5@3.0.2/spark-md5.min.js"></script>
+       <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 </head>
 <body>
     <div class="container-fluid p-0 d-flex flex-column vh-100">
@@ -30,6 +33,11 @@
                     <!-- 新增的入口，链接到新的页面 -->
                     <a class="nav-link active" href="{{ url_for('resource.index') }}">在线资源管理</a>
                 </li>
+                <li class="nav-item ms-3">
+                    <!-- 新增的版本入口，链接到新的页面 -->
+                    <a class="nav-link active" href="{{ url_for('query.page') }}">版本管理</a>
+                </li>
+                 
             </ul>
 
                 <div class="d-flex flex-grow-1 mx-4 search-container">
@@ -410,10 +418,111 @@ curl -X POST -H "X-API-Key: 您的API密钥" -F "file=@本地文件路径" https
         </div>
     </div>
 </div>
+   <!-- 版本管理模态框 -->
+    <div class="modal fade" id="versionModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">版本管理</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="versionForm">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                 <!-- <span class="text-danger">*</span> -->
+                                <label class="form-label">系统</label>
+                                <!-- <input type="text" class="form-control" name="system" value="liangeos" readonly> -->
+                                 <input type="text" class="form-control" name="system" value="liangeos" required>
+                            </div>
+                            <div class="col-md-6">
+                                <!-- <span class="text-danger">*</span> -->
+                                <label class="form-label">类型 </label>
+                                <select class="form-control" name="type" required>
+                                    <option value="">请选择</option>
+                                    <option value="ota">OTA</option>
+                                    <option value="firmware">Firmware</option>
+                                    <option value="firmware">其他</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <!-- <span class="text-danger">*</span> -->
+                                <label class="form-label">厂商 </label>
+                                <input type="text" class="form-control" name="vendor" placeholder="如：小米" required>
+                            </div>
+                            <div class="col-md-6">
+                                <!-- <span class="text-danger">*</span> -->
+                                <label class="form-label">设备类型 </label>
+                                <input type="text" class="form-control" name="device_type" placeholder="如：pad" required>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">版本号</label>
+                                <div class="input-group">
+                                    <!-- placeholder="留空自动生成" -->
+                                    <input type="text" class="form-control" name="version" id="versionNumber" >
+                                    <button class="btn btn-outline-secondary" type="button" onclick="getAutoVersion()">自动生成</button>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">文件大小</label>
+                                <input type="text" class="form-control" name="file_size" readonly>
+                            </div>
+                        </div>
+                         <!-- 校验和区域 -->
+                        <div class="row mb-3">
+                            <!-- <div class="checksum-header"> -->
+                                <!-- <h6 class="mb-0">文件校验和</h6> -->
+                              <label class="form-label">文件校验和计算方法</label>
+                            <!-- </div> -->
+                            <!-- <div id="checksumContainer"> -->
+                                <!-- 默认的MD5校验和 -->
+                                <!-- <div class="checksum-row row g-2">
+                                    <div class="col-md-3"> -->
+                                        <select class="form-control hash-algorithm" name="checksum_type">
+                                            <option value="md5">MD5</option>
+                                            <option value="sha1">SHA-1</option>
+                                            <option value="sha256" selected>SHA-256</option>
+                                            <option value="sha512">SHA-512</option>
+                                            <option value="crc32">CRC32</option>
+                                        </select>
+                                    <!-- </div>
+                                   
+                                </div> -->
+                            <!-- </div> -->
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">升级说明</label>
+                            <textarea class="form-control" name="upgrade_desc" rows="3" placeholder="描述此次升级的主要内容"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">版本说明</label>
+                            <textarea class="form-control" name="version_desc" rows="3" placeholder="版本详细说明"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">扩展字段（JSON格式）</label>
+                            <textarea class="form-control" name="extra_fields" rows="2">{}</textarea>
+                        </div>
+                        <input type="hidden" name="file_path" id="filePath">
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveVersion()">保存版本</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/core.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/highlight.min.js"></script>
+  
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='version_manager/js/main.js') }}"></script>
 </body>
 </html>

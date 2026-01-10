@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 
 from app.utils.decorators import login_required
-from app.models.file import update_file_resource
+from app.models.file import reset_resource_id, update_file_resource
 #路由先直接拷贝，后面再添加用户的管控
 
 resource_bp = Blueprint('resource', __name__)
@@ -24,8 +24,53 @@ def allowed_file(filename):
     ret =  '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
     # print(f"allowed_file:{filename},{ret}")
     return ret
-
-
+#增加用于二级页面的海报查询
+@resource_bp.route('/resource0', methods=['GET'])
+def get_resource0():
+    try:
+        # 获取查询参数
+        title = request.args.get('title')
+        category = request.args.get('category')
+        subcategory = request.args.get('subcategory')
+        
+        # 检查必须至少有一个查询参数
+        if not any([title, category, subcategory]):
+            return jsonify({
+                'success': False,
+                'error': 'At least one search parameter is required (title, category, or subcategory)'
+            }), 400
+        
+        # 构建查询
+        query = Resource.query
+        print(f"get_resource0:{title}")
+        # 根据参数添加过滤条件
+        if title:
+            query = query.filter(Resource.title == title)  # 精确匹配
+        if category:
+            query = query.filter(Resource.category == category)
+        if subcategory:
+            query = query.filter(Resource.subcategory == subcategory)
+        
+        # 获取第一个匹配的资源
+        resource = query.first()
+        
+        if not resource:
+            return jsonify({
+                'success': False,
+                'error': 'No resource found matching the criteria',
+                'data': None
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'data': resource.to_dict()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 @resource_bp.route('/resources', methods=['GET'])
 def get_resources():
     try:
@@ -158,8 +203,10 @@ def update_resource(resource_id):
 def delete_resource(resource_id):
     try:
         resource = Resource.query.get_or_404(resource_id)
+        
         db.session.delete(resource)
         db.session.commit()
+        reset_resource_id(resource_id)
         return jsonify({'message': '资源删除成功'})
     except Exception as e:
         db.session.rollback()
@@ -220,12 +267,48 @@ def batch_import():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 400
-
+#查询所有上传的资源分类
+#增加上传子类，获取上传的子类，type=视频&list=1
+#返回视频的所有子类型
+#type=视频&sub=地理&a1=中国四川
+#返回地理的所有视频，中国与四川
+#
 @resource_bp.route('/categories', methods=['GET'])
 def get_categories():
+    subcategory = request.args.get('type', '') #category
+    sub = request.args.get('sub', '')
+    list = request.args.get('list', '')
+    a1 = request.args.get('a1', '')
+    # a2 = request.args.get('a2', '')
+    print(f"subcategory:{subcategory}")
     try:
-        # 获取所有唯一的分类
-        categories = db.session.query(Resource.category).distinct().all()
+        if subcategory:
+            # print(f"{subcategory}'s:")
+            if list == "1":
+                categories = Resource.query.filter(Resource.category == subcategory).distinct()
+                tags_list = []
+                for resource in categories:
+                    if resource.subcategory in tags_list:
+                        continue
+                    else:
+                        tags_list.append(resource.subcategory)
+                # tags_list = [resource.subcategory for resource in categories if resource.subcategory]
+                return jsonify(tags_list)
+            else:
+                if sub:
+                    if a1 :
+                        categories = Resource.query.filter(Resource.category == subcategory,Resource.subcategory == sub
+                                                           ,Resource.tags.contains(a1)).all()
+                    else:
+                        categories = Resource.query.filter(Resource.category == subcategory,Resource.subcategory == sub).all()
+                else:
+                    categories = Resource.query.filter(Resource.category == subcategory).all()
+
+            
+            return jsonify([r.to_dict() for r in categories])
+        else:
+            # 获取所有唯一的分类
+            categories = db.session.query(Resource.category).distinct().all()
         return jsonify([c[0] for c in categories if c[0]])
     except Exception as e:
         return jsonify({'error': str(e)}), 500

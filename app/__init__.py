@@ -19,6 +19,9 @@ def create_app(config_name='default'):
     # 确保上传目录存在
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
+    #增加备份文件
+    if not os.path.exists(app.config['BACKUP_FOLDER']):
+        os.makedirs(app.config['BACKUP_FOLDER'])
     
     # 初始化扩展
     db.init_app(app)
@@ -38,6 +41,17 @@ def create_app(config_name='default'):
     from .routes.file_routes import file_bp
     from .routes.user_routes import user_bp
     from .routes.vocabulary import vocabulary_bp
+    #拷贝版本管理的蓝图
+        # 注册蓝图
+    # from routes.upload_routes import upload_bp
+   
+    from .routes.query_routes import query_bp
+    from .routes.version_routes import version_bp
+    
+    # app.register_blueprint(upload_bp, url_prefix='/api/upload')
+    app.register_blueprint(version_bp, url_prefix='/api/version')
+    app.register_blueprint(query_bp, url_prefix='/api/query')
+    
     #添加拷贝的蓝图到这里并注册
     from .routes.resource_routes import resource_bp
     app.register_blueprint(resource_bp, url_prefix='/api')

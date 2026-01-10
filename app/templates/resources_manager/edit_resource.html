@@ -122,7 +122,7 @@ document.getElementById('editResourceForm').addEventListener('submit', async (e)
         });
         
         alert('资源更新成功！');
-        window.location.href = '/';
+        window.location.href = '/api/';
     } catch (error) {
         console.error('更新失败:', error);
         alert('更新失败: ' + (error.response?.data?.error || '未知错误'));
