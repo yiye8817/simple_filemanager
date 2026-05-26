@@ -12,6 +12,8 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_admin = db.Column(db.Boolean, default=False)
     api_key = db.Column(db.String(64), unique=True)
+    # MusicFree 插件分享总开关; 关闭后 /api/music/* 一律 403 / 空, 与"该用户没启用此能力"等价
+    musicfree_enabled = db.Column(db.Boolean, default=False, nullable=False)
     files = db.relationship('File', backref='owner', lazy=True)
     
     def set_password(self, password):

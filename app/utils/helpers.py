@@ -11,7 +11,7 @@ from mutagen.wave import WAVE
 # from axmlparserpy.axmlprinter import AXMLPrinter
 from androguard.misc import AnalyzeAPK
 
-# 文件类型映射
+# 文件类型映射（应用程序按平台拆分；旧数据中的 file_type=apk 仍可在查询时兼容）
 FILE_TYPES = {
     'images': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp'],
     'documents': ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv', '.md'],
@@ -19,8 +19,28 @@ FILE_TYPES = {
     'audio': ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a'],
     'archives': ['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2'],
     'code': ['.py', '.js', '.html', '.css', '.java', '.c', '.cpp', '.php', '.rb', '.go', '.json', '.xml'],
-    'apk':['.apk']
+    'applications_android': ['.apk', '.aab'],
+    'applications_linux': ['.deb', '.rpm', '.appimage', '.snap', '.flatpak'],
+    'applications_windows': ['.exe', '.msi', '.msix', '.appx'],
 }
+
+# 列表 API 中图标字段（与前端 class="bi ${icon}" 搭配）
+FILE_TYPE_BI_ICONS = {
+    'applications_android': 'bi-google-play',
+    'applications_linux': 'bi-terminal',
+    'applications_windows': 'bi-windows',
+}
+
+def resolve_upload_physical_path(relative_path, user_id, upload_root):
+    """
+    将数据库中的相对路径（file.path）解析为磁盘上的绝对路径。
+    统一处理反斜杠与多余斜杠，避免工作目录变化导致相对 UPLOAD_FOLDER 找不到文件。
+    """
+    root = os.path.abspath(upload_root or '')
+    rel = (relative_path or '').replace('\\', '/').strip('/')
+    parts = [p for p in rel.split('/') if p]
+    return os.path.normpath(os.path.join(root, str(user_id), *parts))
+
 
 def format_size(size_bytes):
     """格式化文件大小为人类可读格式"""
@@ -43,7 +63,7 @@ def get_file_icon(file_path):
     
     for type_name, extensions in FILE_TYPES.items():
         if file_ext in extensions:
-            return type_name
+            return FILE_TYPE_BI_ICONS.get(type_name, type_name)
     
     return "file"
 
@@ -208,6 +228,9 @@ def parse_video(full_path, relative_path, is_dbclick=False):
 def parse_apk(full_path, relative_path=None):
     """解析APK文件，增加版本号信息"""
     thumb_path, thumb_url = generate_thumbnail_path(relative_path, ext='.png')
+    _td = os.path.dirname(os.path.abspath(thumb_path))
+    if _td and not os.path.exists(_td):
+        os.makedirs(_td, exist_ok=True)
     app_name = "Unknown"
     version_name = "Unknown"
     version_code = "Unknown" # 新增
@@ -230,6 +253,7 @@ def parse_apk(full_path, relative_path=None):
         # 检查并提取应用图标
         # 仅在缩略图尚未缓存时执行提取操作
         if not os.path.exists(thumb_path):
+            icon_path = None
             # a.get_app_icon() 会返回图标在APK内的路径，例如 'res/mipmap-xxxhdpi-v4/ic_launcher.png'
             if hasattr(a, 'get_app_icon'):  # 检查方法是否存在
                 icon_path = a.get_app_icon()  # 优先使用官方方法
@@ -287,13 +311,22 @@ def parse_document(full_path, relative_path):
         'details': {'filename': os.path.basename(relative_path)}
     }
 #增加下载文件的接口，方便file里减少代码
-def download_file_from(user_id,file):
-    physical_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(user_id), file.path)
-    print(f"external_download_file:{user_id,file,physical_path}")
+def download_file_from(user_id, file):
+    upload_root = current_app.config['UPLOAD_FOLDER']
+    physical_path = resolve_upload_physical_path(file.path, user_id, upload_root)
+    current_app.logger.info(
+        "download_file_from: user_id=%s file_id=%s db_path=%r phys=%r exists=%s",
+        user_id, getattr(file, 'id', None), file.path, physical_path, os.path.exists(physical_path),
+    )
     if not os.path.exists(physical_path):
+        parent = os.path.dirname(physical_path)
+        current_app.logger.warning(
+            "download_file_from: 磁盘不存在 phys=%r parent_exists=%s",
+            physical_path, os.path.isdir(parent),
+        )
         return jsonify({'error': '文件不存在'}), 404
-    
+
     if file.is_directory:
         return jsonify({'error': '不支持下载整个目录，请指定具体文件'}), 400
-    
+
     return send_file(physical_path, as_attachment=True, download_name=file.name)

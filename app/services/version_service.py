@@ -24,9 +24,10 @@ class VersionService:
                 else:
                     # 如果格式不标准，直接递增
                     return f"{latest.version}.1"
-            except:
+            except Exception:
                 return "0.0.1"
-        return "0.0.0"
+        # 首条记录：0.0.0 易被误认为「未解析」占位，从 0.0.1 起算
+        return "0.0.1"
     
     @staticmethod
     def create_version(data):
@@ -41,9 +42,9 @@ class VersionService:
             status='active'
         ).update({'is_latest': False})
         
-        # 创建新版本
+        # 创建新版本（system 与前端/查询页默认一致，勿用错误的 lineageos 拼写）
         version = FileVersion(
-            system=data.get('system', 'lineageos'),
+            system=data.get('system') or 'liangeos',
             type=data['type'],
             vendor=data['vendor'],
             device_type=data['device_type'],

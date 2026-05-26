@@ -7,8 +7,22 @@ from app.models.version_model import db, FileVersion
 import json
 from app.models.file import update_file_version
 from app.utils.decorators import login_required
+from app.models import File
+from app.utils.helpers import parse_apk
 
 version_bp = Blueprint('version', __name__)
+
+
+def _is_android_application_file(f):
+    """是否为 Android 应用包（扩展名或 file_type）"""
+    if not f or f.is_directory:
+        return False
+    name = (f.name or '').lower()
+    ext = os.path.splitext(name)[1].lower()
+    if ext in ('.apk', '.aab'):
+        return True
+    ft = (f.file_type or '').lower()
+    return ft in ('applications_android', 'apk') or 'android' in ft
 
 @version_bp.route('/create', methods=['POST'])
 @login_required # <-- 使用这一行来保护页面
@@ -98,22 +112,19 @@ def get_by_file_id():
                 'data': version.to_dict()
             })
         else:
-            # print(version)
             return jsonify({
                 'success': True,
                 'data': {
-                     'version': '0.0.0'
-                    #  'file_size':
+                    'version': '',
                 }
             })
     except Exception as e:
         print(e)
         return jsonify({
-             'success': True,
-                'data': {
-                     'version': '0.0.0'
-                    #  'file_size':
-                }
+            'success': True,
+            'data': {
+                'version': '',
+            }
         })
 @version_bp.route('/auto-version', methods=['POST'])
 def get_auto_version():
@@ -139,12 +150,72 @@ def get_auto_version():
             'version': version
         })
     except Exception as e:
-        print("default version:0.0.0")
+        print(f"auto-version fallback: {e}")
         return jsonify({
             'success': True,
-            'version': "0.0.0"
+            'version': "0.0.1"
         })
     # , 500
+
+
+@version_bp.route('/apk-version-from-file', methods=['POST'])
+@login_required
+def apk_version_from_file():
+    """从已上传的 APK/AAB 解析 AndroidManifest 中的版本名、版本号（versionCode）。"""
+    try:
+        data = request.json or {}
+        file_id = data.get('file_id')
+        user_id = session.get('user_id')
+        if not file_id:
+            return jsonify({'success': False, 'error': '缺少 file_id'}), 400
+
+        f = File.query.filter_by(id=file_id, user_id=user_id).first()
+        if not f:
+            return jsonify({'success': False, 'error': '文件不存在'}), 404
+        if not _is_android_application_file(f):
+            return jsonify({'success': False, 'error': '不是 Android 应用文件'}), 400
+
+        physical_path = os.path.join(current_app.config['UPLOAD_FOLDER'], str(user_id), f.path)
+        if not os.path.isfile(physical_path):
+            return jsonify({'success': False, 'error': '物理文件不存在'}), 404
+
+        info = parse_apk(physical_path, f.path)
+        details = info.get('details') or {}
+        version_name = details.get('version_name')
+        version_code = details.get('version_code')
+        package = details.get('package')
+        app_name = details.get('app_name')
+
+        def _usable_manifest_version(v):
+            if v is None:
+                return False
+            s = str(v).strip()
+            return bool(s) and s.lower() != 'unknown'
+
+        # 版本号：优先 versionName（含合法 "0"）；否则 versionCode
+        if _usable_manifest_version(version_name):
+            display = str(version_name).strip()
+        elif _usable_manifest_version(version_code):
+            display = str(version_code).strip()
+        else:
+            return jsonify({
+                'success': False,
+                'error': '无法从 APK 解析版本信息，请确认文件完整',
+            }), 422
+
+        return jsonify({
+            'success': True,
+            'version': display,
+            'version_name': version_name,
+            'version_code': version_code,
+            'package': package,
+            'app_name': app_name,
+            'source': 'apk_parse',
+        })
+    except Exception as e:
+        print(f'apk_version_from_file: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @version_bp.route('/<int:id>', methods=['GET'])
 def get_version(id):

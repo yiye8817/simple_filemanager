@@ -7,5 +7,10 @@ SQLAlchemy
 unidecode
 mutagen
 moviepy
+Pillow
+psutil>=5.9
+paramiko>=3.0
+flask-sock>=0.7
 bytecode
 androguard
+pytest>=7.0.0

@@ -1,0 +1,5 @@
+# 都是可选依赖, 没装也能工作:
+#  - psutil 用来采集真实的 cpu / 内存 / 磁盘 / 启动时间; 没装时只会回退到 shutil.disk_usage('/') + load_avg
+#  - requests 用来用 connection pool 复用 HTTP 连接; 没装时回退到 urllib (标准库)
+psutil>=5.9
+requests>=2.28

@@ -111,6 +111,38 @@
 </div>
 <script>
 var gFileId = -1;
+/** 从文件管理「添加到资源」跳转时 URL 带 ?title=&resource_link=&category=&file_id= */
+(function fillAddResourceFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const title = params.get('title');
+    if (title) {
+        const el = document.getElementById('title');
+        if (el) el.value = title;
+    }
+    const link = params.get('resource_link');
+    if (link) {
+        const el = document.getElementById('resource_link');
+        if (el) el.value = link;
+    }
+    const cat = params.get('category');
+    if (cat) {
+        const sel = document.getElementById('category');
+        const ci = document.getElementById('categoryInput');
+        if (sel) {
+            const opt = Array.from(sel.options).find(o => o.value === cat);
+            if (opt) {
+                sel.value = cat;
+            } else if (ci) {
+                ci.value = cat;
+                sel.value = '';
+            }
+        }
+    }
+    const fid = params.get('file_id');
+    if (fid && !Number.isNaN(parseInt(fid, 10))) {
+        gFileId = parseInt(fid, 10);
+    }
+})();
 document.getElementById('addResourceForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     

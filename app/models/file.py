@@ -20,24 +20,41 @@ class File(db.Model):
     resource_id = db.Column(db.Integer)
     #添加版本管理字段
     version_str = db.Column(db.String(16))
+    # 仅对 is_directory=True 有意义: 标记该目录是否被分享到 MusicFree 插件
+    # ("白名单" 模式: 只有 music_shared=True 的目录及其下音频才会暴露给 /api/music/*)
+    music_shared = db.Column(db.Boolean, default=False, nullable=False)
     
     children = db.relationship('File', backref=db.backref('parent', remote_side=[id]), lazy=True)
     
-    def to_dict(self):
+    def to_dict(self, child_count=None):
+        """序列化为 dict。
+
+        Args:
+            child_count: 仅对 ``is_directory=True`` 有意义。若提供，``size_formatted``
+                会显示为 "N 项" 而不是 "0 B"，并额外暴露 ``child_count`` 字段。
+                批量场景下请用 ``_list_with_child_counts``（路由层 helper）一次性算好
+                传入，避免 N+1 查询。
+        """
+        if self.is_directory and child_count is not None:
+            size_formatted = f'{int(child_count)} 项'
+        else:
+            size_formatted = format_size(self.size)
         return {
             'id': self.id,
             'name': self.name,
             'path': self.path,
             'size': self.size,
-            'size_formatted': format_size(self.size),
+            'size_formatted': size_formatted,
             'type': self.file_type,
             'is_dir': self.is_directory,
             'modified': self.modified_at.strftime('%Y-%m-%d %H:%M'),
-            'icon': get_file_icon(self.path),
+            'icon': 'bi-folder' if self.is_directory else get_file_icon(self.path),
             'is_public': self.is_public,
             'public_share_id': self.public_share_id,
             'resource_id':self.resource_id,
-            'version_str':self.version_str
+            'version_str':self.version_str,
+            'child_count': int(child_count) if (self.is_directory and child_count is not None) else None,
+            'music_shared': bool(self.music_shared) if self.is_directory else None,
         }
     
     def generate_share_id(self):

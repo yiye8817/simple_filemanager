@@ -1,0 +1,500 @@
+{# 服务管理页：和 templates/llm/index.html 同款顶部导航风格，
+   主体为「左边：服务列表 / 右边：详情 + 日志」两栏布局。 #}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>服务管理 · 云端文件</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <style>
+        body { background: #f6f7fb; }
+        .svc-card { transition: box-shadow .15s ease-in-out; cursor: pointer; }
+        .svc-card.active { border-color: #0d6efd; box-shadow: 0 0 0 0.15rem rgba(13,110,253,.18); }
+        .svc-card:hover:not(.active) { box-shadow: 0 4px 14px rgba(0,0,0,.06); }
+        .status-dot { width: .5rem; height: .5rem; border-radius: 50%; display: inline-block; }
+        .status-running { background: #198754; }
+        .status-stopped, .status-idle { background: #6c757d; }
+        .status-failed { background: #dc3545; }
+        .log-pane {
+            background: #0b1020; color: #d6deeb;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: .82rem; line-height: 1.45;
+            padding: 12px 14px; border-radius: 6px;
+            max-height: 420px; overflow: auto; white-space: pre-wrap; word-break: break-all;
+        }
+        .empty-pane { color: #98a3b3; }
+        .badge-port { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .access-url { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand navbar-dark bg-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/"><i class="bi bi-cloud-fill me-1"></i>云端文件管理</a>
+        <ul class="navbar-nav me-auto">
+            <li class="nav-item"><a class="nav-link" href="/">文件</a></li>
+            <li class="nav-item"><a class="nav-link" href="/api/">资源</a></li>
+            <li class="nav-item"><a class="nav-link" href="/api/query/query.html">版本</a></li>
+            <li class="nav-item"><a class="nav-link" href="/llm">大模型</a></li>
+            <li class="nav-item"><a class="nav-link active" aria-current="page" href="/services">服务</a></li>
+            <li class="nav-item"><a class="nav-link" href="/devices">设备</a></li>
+        </ul>
+        <span class="navbar-text text-white-50 me-3"><i class="bi bi-person-circle me-1"></i>{{ user_name }}</span>
+    </div>
+</nav>
+
+<div class="container-fluid py-3">
+    <!-- 资源监控面板 -->
+    <div class="card mb-3" data-collapsible="1" data-collapse-key="svc-monitor">
+        <div class="card-header d-flex align-items-center">
+            <i class="bi bi-speedometer2 me-2"></i>
+            <span class="fw-semibold">资源监控</span>
+            <span class="text-muted small ms-2" id="mon-updated">--</span>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <div class="form-check form-switch m-0">
+                    <input class="form-check-input" type="checkbox" id="mon-auto" checked>
+                    <label class="form-check-label small text-muted" for="mon-auto">自动刷新</label>
+                </div>
+                <button class="btn btn-link btn-sm p-0" id="mon-refresh" title="立即刷新">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+        </div>
+        <div class="card-body py-3">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <div class="text-muted small">CPU</div>
+                    <div class="d-flex align-items-baseline">
+                        <span class="h4 mb-0 me-2" id="mon-cpu-percent">--</span>
+                        <span class="text-muted small" id="mon-cpu-cores">--</span>
+                    </div>
+                    <div class="progress mt-1" style="height:6px;">
+                        <div class="progress-bar bg-primary" id="mon-cpu-bar" style="width:0%"></div>
+                    </div>
+                    <div class="small text-muted mt-1" id="mon-load">load: --</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">内存</div>
+                    <div class="d-flex align-items-baseline">
+                        <span class="h4 mb-0 me-2" id="mon-mem-percent">--</span>
+                        <span class="text-muted small" id="mon-mem-text">--</span>
+                    </div>
+                    <div class="progress mt-1" style="height:6px;">
+                        <div class="progress-bar bg-success" id="mon-mem-bar" style="width:0%"></div>
+                    </div>
+                    <div class="small text-muted mt-1" id="mon-swap">swap: --</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">磁盘</div>
+                    <div id="mon-disks" class="small">--</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">GPU</div>
+                    <div id="mon-gpus" class="small">--</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 服务类型 Tab -->
+    <ul class="nav nav-pills mb-3" id="svc-tab" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-native" type="button" role="tab">
+                <i class="bi bi-terminal me-1"></i>原生服务（tar.gz + run.sh）
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-docker" type="button" role="tab" id="svc-tab-docker-btn">
+                <i class="bi bi-box me-1"></i>Docker 服务（compose）
+            </button>
+        </li>
+    </ul>
+    <div class="tab-content">
+    <div class="tab-pane fade show active" id="tab-native" role="tabpanel">
+    <div class="row g-3">
+        <!-- 左：上传 + 服务列表 -->
+        <div class="col-lg-5">
+            <div class="card mb-3" data-collapsible="1" data-collapse-key="svc-upload">
+                <div class="card-header d-flex align-items-center">
+                    <i class="bi bi-cloud-upload me-2"></i>
+                    <span class="fw-semibold">上传 tar.gz 创建服务</span>
+                </div>
+                <div class="card-body">
+                    <form id="svc-create-form" enctype="multipart/form-data">
+                        <div class="mb-2">
+                            <label class="form-label small text-muted mb-1 d-flex align-items-center justify-content-between">
+                                <span><code>frpc.toml</code> 路径</span>
+                                <button type="button" class="btn btn-link btn-sm p-0" id="svc-frpc-reset" title="恢复默认">
+                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                </button>
+                            </label>
+                            <div class="input-group input-group-sm">
+                                <input class="form-control" id="svc-frpc-path" placeholder="/etc/frpc.toml" autocomplete="off">
+                                <button class="btn btn-outline-primary" type="button" id="svc-frpc-apply">
+                                    <i class="bi bi-check2 me-1"></i>切换
+                                </button>
+                            </div>
+                            <div class="form-text" id="svc-frpc-hint">默认读取 <code>/etc/frpc.toml</code>；可填其它绝对路径，仅当前浏览器记住。</div>
+                        </div>
+                        <hr class="my-2">
+                        <div class="mb-2">
+                            <label class="form-label small text-muted mb-1">服务名</label>
+                            <input class="form-control" name="name" required maxlength="120" placeholder="例如：demo-bot">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small text-muted mb-1 d-flex align-items-center justify-content-between">
+                                <span>端口（来自 <code id="svc-port-source">/etc/frpc.toml</code>）</span>
+                                <button type="button" class="btn btn-link btn-sm p-0" id="svc-refresh-ports" title="刷新">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                            </label>
+                            <select class="form-select" name="port_combo" id="svc-port-combo" required>
+                                <option value="" disabled selected>加载中…</option>
+                            </select>
+                            <input type="hidden" name="local_port">
+                            <input type="hidden" name="remote_port">
+                            <div class="form-text" id="svc-port-hint">每行格式：proxy 名 · localPort → remotePort（占用中会被禁用）</div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small text-muted mb-1">归档文件</label>
+                            <input class="form-control" type="file" name="archive" accept=".tar.gz,.tgz,application/gzip" required>
+                            <div class="form-text">仅支持 .tar.gz / .tgz；归档内必须包含 <code>run.sh</code>，将以 <code>localPort</code> 作为第一个参数运行。</div>
+                        </div>
+                        <div class="d-flex gap-2 mt-3">
+                            <button type="submit" class="btn btn-primary" id="svc-create-btn">
+                                <i class="bi bi-plus-lg me-1"></i>上传并创建
+                            </button>
+                            <button type="reset" class="btn btn-outline-secondary">清空</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card" data-collapsible="1" data-collapse-key="svc-list">
+                <div class="card-header d-flex align-items-center">
+                    <i class="bi bi-list-ul me-2"></i>
+                    <span class="fw-semibold">我的服务</span>
+                    <button class="btn btn-link btn-sm ms-auto p-0" id="svc-refresh-list" title="刷新">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div id="svc-list" class="list-group list-group-flush">
+                        <div class="text-center py-4 empty-pane">加载中…</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右：服务详情 + 日志 -->
+        <div class="col-lg-7">
+            <div class="card mb-3" id="svc-detail-card" style="display:none;" data-collapsible="1" data-collapse-key="svc-detail">
+                <div class="card-header d-flex align-items-center">
+                    <i class="bi bi-cpu me-2"></i>
+                    <span class="fw-semibold" id="svc-detail-name">服务详情</span>
+                    <span class="badge ms-2" id="svc-detail-status">--</span>
+                    <div class="ms-auto d-flex gap-2">
+                        <button class="btn btn-outline-primary btn-sm" id="svc-update-btn"
+                                title="上传新归档，差异文件覆盖、新增文件/目录补齐">
+                            <i class="bi bi-cloud-arrow-up me-1"></i>更新归档
+                        </button>
+                        <button class="btn btn-success btn-sm" id="svc-start-btn">
+                            <i class="bi bi-play-fill me-1"></i>启动
+                        </button>
+                        <button class="btn btn-warning btn-sm" id="svc-stop-btn">
+                            <i class="bi bi-stop-fill me-1"></i>停止
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" id="svc-delete-btn">
+                            <i class="bi bi-trash me-1"></i>删除
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="text-muted small">归档</div>
+                            <div id="svc-detail-archive" class="text-truncate">--</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="text-muted small">代理（frpc proxy）</div>
+                            <div id="svc-detail-proxy">--</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="text-muted small">本地端口</div>
+                            <div><span class="badge bg-secondary badge-port" id="svc-detail-local">--</span></div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="text-muted small">远端端口</div>
+                            <div><span class="badge bg-info text-dark badge-port" id="svc-detail-remote">--</span></div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="text-muted small">PID / 上次退出码</div>
+                            <div id="svc-detail-pid">--</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="text-muted small">最近一次启动 / 停止</div>
+                            <div id="svc-detail-times" class="small">--</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="text-muted small">访问地址</div>
+                            <div>
+                                <a href="#" target="_blank" rel="noopener" class="access-url" id="svc-detail-url">--</a>
+                            </div>
+                        </div>
+                        <div class="col-12" id="svc-detail-error-row" style="display:none;">
+                            <div class="alert alert-danger mb-0 py-2 small" id="svc-detail-error"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" id="svc-log-card" style="display:none;" data-collapsible="1" data-collapse-key="svc-log">
+                <div class="card-header d-flex align-items-center">
+                    <i class="bi bi-terminal me-2"></i>
+                    <span class="fw-semibold">运行日志</span>
+                    <div class="ms-auto d-flex align-items-center gap-2">
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" id="svc-log-autorefresh" checked>
+                            <label class="form-check-label small text-muted" for="svc-log-autorefresh">自动刷新</label>
+                        </div>
+                        <button class="btn btn-link btn-sm p-0" id="svc-log-copy" title="复制全部日志">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                        <button class="btn btn-link btn-sm p-0" id="svc-log-refresh" title="立即刷新">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <pre class="log-pane mb-0" id="svc-log-pane">（暂无日志）</pre>
+                </div>
+            </div>
+
+            <div class="card" id="svc-empty-card">
+                <div class="card-body text-center py-5 empty-pane">
+                    <i class="bi bi-inbox" style="font-size:2rem;"></i>
+                    <div class="mt-2">从左侧选一个服务查看详情，或上传新归档创建。</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div><!-- /#tab-native -->
+
+    <!-- Docker tab -->
+    <div class="tab-pane fade" id="tab-docker" role="tabpanel">
+        <div id="dk-availability" class="alert alert-warning d-none mb-3" role="alert"></div>
+        <div class="row g-3">
+            <!-- 左：上传 + 列表 -->
+            <div class="col-lg-5">
+                <div class="card mb-3" data-collapsible="1" data-collapse-key="dk-upload">
+                    <div class="card-header d-flex align-items-center">
+                        <i class="bi bi-cloud-upload me-2"></i>
+                        <span class="fw-semibold">上传 docker-compose 创建服务</span>
+                    </div>
+                    <div class="card-body">
+                        <form id="dk-create-form" enctype="multipart/form-data">
+                            <div class="mb-2">
+                                <label class="form-label small text-muted mb-1">服务名</label>
+                                <input class="form-control" name="name" required maxlength="120" placeholder="例如：grafana">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small text-muted mb-1 d-flex align-items-center justify-content-between">
+                                    <span>端口（与原生服务共享 <code id="dk-port-source">/etc/frpc.toml</code>）</span>
+                                    <button type="button" class="btn btn-link btn-sm p-0" id="dk-refresh-ports" title="刷新">
+                                        <i class="bi bi-arrow-clockwise"></i>
+                                    </button>
+                                </label>
+                                <select class="form-select" name="port_combo" id="dk-port-combo" required>
+                                    <option value="" disabled selected>加载中…</option>
+                                </select>
+                                <input type="hidden" name="local_port">
+                                <input type="hidden" name="remote_port">
+                                <div class="form-text">所选 <code>localPort</code> 会作为 <code>PORT</code> 环境变量注入；推荐 compose 写 <code>ports: ["${PORT}:8080"]</code>。</div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small text-muted mb-1">compose 文件</label>
+                                <input class="form-control" type="file" name="compose" required
+                                       accept=".yml,.yaml,.tar.gz,.tgz,application/x-yaml,application/gzip">
+                                <div class="form-text">支持 <code>.yml</code> / <code>.yaml</code> 单文件，或包含 compose 的 <code>.tar.gz</code>。</div>
+                            </div>
+                            <div class="d-flex gap-2 mt-3">
+                                <button type="submit" class="btn btn-primary" id="dk-create-btn">
+                                    <i class="bi bi-plus-lg me-1"></i>上传并创建
+                                </button>
+                                <button type="reset" class="btn btn-outline-secondary">清空</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card" data-collapsible="1" data-collapse-key="dk-list">
+                    <div class="card-header d-flex align-items-center">
+                        <i class="bi bi-list-ul me-2"></i>
+                        <span class="fw-semibold">Docker 服务</span>
+                        <button class="btn btn-link btn-sm ms-auto p-0" id="dk-refresh-list" title="刷新">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="dk-list" class="list-group list-group-flush">
+                            <div class="text-center py-4 empty-pane">加载中…</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右：详情 + 日志 -->
+            <div class="col-lg-7">
+                <div class="card mb-3" id="dk-detail-card" style="display:none;" data-collapsible="1" data-collapse-key="dk-detail">
+                    <div class="card-header d-flex align-items-center">
+                        <i class="bi bi-box-seam me-2"></i>
+                        <span class="fw-semibold" id="dk-detail-name">服务详情</span>
+                        <span class="badge ms-2" id="dk-detail-status">--</span>
+                        <div class="ms-auto d-flex gap-2">
+                            <button class="btn btn-outline-secondary btn-sm" id="dk-pull-btn">
+                                <i class="bi bi-cloud-download me-1"></i>拉取镜像
+                            </button>
+                            <button class="btn btn-success btn-sm" id="dk-start-btn">
+                                <i class="bi bi-play-fill me-1"></i>启动
+                            </button>
+                            <button class="btn btn-warning btn-sm" id="dk-stop-btn">
+                                <i class="bi bi-stop-fill me-1"></i>停止
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" id="dk-delete-btn">
+                                <i class="bi bi-trash me-1"></i>卸载
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <div class="text-muted small">compose 文件</div>
+                                <div id="dk-detail-compose" class="text-truncate">--</div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="text-muted small">代理（frpc proxy）</div>
+                                <div id="dk-detail-proxy">--</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-muted small">本地端口</div>
+                                <div><span class="badge bg-secondary badge-port" id="dk-detail-local">--</span></div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-muted small">远端端口</div>
+                                <div><span class="badge bg-info text-dark badge-port" id="dk-detail-remote">--</span></div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="text-muted small">最近启动 / 停止</div>
+                                <div id="dk-detail-times" class="small">--</div>
+                            </div>
+                            <div class="col-12">
+                                <div class="text-muted small">访问地址</div>
+                                <a href="#" target="_blank" rel="noopener" class="access-url" id="dk-detail-url">--</a>
+                            </div>
+                            <div class="col-12">
+                                <div class="text-muted small">容器</div>
+                                <div id="dk-detail-containers" class="small">--</div>
+                            </div>
+                            <div class="col-12" id="dk-detail-error-row" style="display:none;">
+                                <div class="alert alert-danger mb-0 py-2 small" id="dk-detail-error"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" id="dk-log-card" style="display:none;" data-collapsible="1" data-collapse-key="dk-log">
+                    <div class="card-header d-flex align-items-center">
+                        <i class="bi bi-terminal me-2"></i>
+                        <span class="fw-semibold">容器日志</span>
+                        <div class="ms-auto d-flex align-items-center gap-2">
+                            <div class="form-check form-switch m-0">
+                                <input class="form-check-input" type="checkbox" id="dk-log-autorefresh" checked>
+                                <label class="form-check-label small text-muted" for="dk-log-autorefresh">自动刷新</label>
+                            </div>
+                            <button class="btn btn-link btn-sm p-0" id="dk-log-copy" title="复制全部日志">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                            <button class="btn btn-link btn-sm p-0" id="dk-log-refresh" title="立即刷新">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <pre class="log-pane mb-0" id="dk-log-pane">（暂无日志）</pre>
+                    </div>
+                </div>
+
+                <div class="card" id="dk-empty-card">
+                    <div class="card-body text-center py-5 empty-pane">
+                        <i class="bi bi-box" style="font-size:2rem;"></i>
+                        <div class="mt-2">从左侧选一个服务查看详情，或上传新 compose 创建。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div><!-- /#tab-docker -->
+    </div><!-- /.tab-content -->
+</div>
+
+<!-- 更新归档 Modal -->
+<div class="modal fade" id="svc-update-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-cloud-arrow-up me-2"></i>更新服务归档</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted mb-3">
+          上传新的 <code>.tar.gz</code>：差异文件会被覆盖、新增的文件/目录会被补上，
+          已有但 tar 中没有的文件 <strong>不会被删除</strong>。
+        </p>
+        <form id="svc-update-form" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label small text-muted mb-1">新归档文件</label>
+            <input class="form-control" type="file" name="archive" required
+                   accept=".tar.gz,.tgz,application/gzip">
+          </div>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="svc-update-replace-archive" name="replace_archive" value="1" checked>
+            <label class="form-check-label small" for="svc-update-replace-archive">
+              同时替换基础归档（推荐：保证"清空 work 目录后重启"也基于新内容）
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="svc-update-stop-first" name="stop_first" value="1">
+            <label class="form-check-label small" for="svc-update-stop-first">
+              更新前先停止当前进程（更安全；不勾选表示热更新）
+            </label>
+          </div>
+        </form>
+        <div class="alert alert-light border mt-3 mb-0 small d-none" id="svc-update-result"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+        <button type="button" class="btn btn-primary" id="svc-update-submit">
+          <i class="bi bi-arrow-repeat me-1"></i>开始同步
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 全局简易提示（替代 alert，避免阻塞） -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1080;">
+    <div class="toast align-items-center text-bg-dark border-0" id="svc-toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body" id="svc-toast-body">…</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="关闭"></button>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/collapse.js') }}"></script>
+<script src="{{ url_for('static', filename='services/js/main.js') }}"></script>
+<script src="{{ url_for('static', filename='services/js/docker.js') }}"></script>
+</body>
+</html>

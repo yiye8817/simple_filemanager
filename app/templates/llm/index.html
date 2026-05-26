@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大模型配置管理</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <style>
+        body { background: #f6f7fb; }
+        .llm-sidebar { min-height: calc(100vh - 56px); }
+        .llm-card { transition: box-shadow .15s ease-in-out; }
+        .llm-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+        .key-mask { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .ref-chip { font-size: .8rem; }
+        .ref-chip a { text-decoration: none; }
+        .copy-btn { cursor: pointer; }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand navbar-dark bg-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/"><i class="bi bi-cloud-fill me-1"></i>云端文件管理</a>
+        <ul class="navbar-nav me-auto">
+            <li class="nav-item"><a class="nav-link" href="/">文件</a></li>
+            <li class="nav-item"><a class="nav-link" href="/api/">资源</a></li>
+            <li class="nav-item"><a class="nav-link active" aria-current="page" href="/llm">大模型</a></li>
+        </ul>
+        <span class="navbar-text text-white-50 me-3"><i class="bi bi-person-circle me-1"></i>{{ user_name }}</span>
+    </div>
+</nav>
+
+<div class="container-fluid py-3">
+    <div class="row g-3">
+        <aside class="col-12 col-md-3 col-lg-2">
+            <div class="card llm-sidebar">
+                <div class="card-header d-flex align-items-center">
+                    <span class="fw-semibold"><i class="bi bi-tags me-1"></i>分类</span>
+                    <button class="btn btn-sm btn-outline-primary ms-auto" id="btn-new">
+                        <i class="bi bi-plus-lg"></i>新增
+                    </button>
+                </div>
+                <div class="list-group list-group-flush" id="category-list">
+                    <a href="#" class="list-group-item list-group-item-action active" data-category="">
+                        全部 <span class="badge bg-secondary float-end" id="count-all">0</span>
+                    </a>
+                </div>
+                <div class="card-footer small text-muted">
+                    接口：<code>GET /api/llm</code> ·
+                    <code>GET /api/external/llm</code>（X-API-Key）
+                </div>
+            </div>
+        </aside>
+
+        <main class="col-12 col-md-9 col-lg-10">
+            <div class="d-flex align-items-center mb-3 gap-2">
+                <h4 class="mb-0" id="current-category-title">全部</h4>
+                <div class="input-group input-group-sm ms-auto" style="max-width:280px;">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" id="search-input" class="form-control" placeholder="按名称/base_url/模型搜索">
+                </div>
+                <div class="form-check form-switch ms-2">
+                    <input class="form-check-input" type="checkbox" id="mask-toggle" checked>
+                    <label class="form-check-label small" for="mask-toggle">遮盖 API Key</label>
+                </div>
+            </div>
+
+            <div class="row g-3" id="items-grid"></div>
+            <div class="text-center text-muted py-5 d-none" id="empty-tip">
+                <i class="bi bi-inbox display-5"></i>
+                <div class="mt-2">暂无配置，点击左侧「新增」添加。</div>
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- 编辑 / 新增弹窗 -->
+<div class="modal fade" id="llmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="llmModalTitle">新增大模型配置</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="llm-form">
+                    <input type="hidden" id="f-id">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="f-name" required placeholder="例如：OpenAI · 生产">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">分类</label>
+                            <input type="text" class="form-control" id="f-category" list="category-options" placeholder="例如：OpenAI / Anthropic / 国产 / 本地 / 其他">
+                            <datalist id="category-options"></datalist>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">厂商标识</label>
+                            <input type="text" class="form-control" id="f-provider" placeholder="openai / anthropic / azure / ollama / custom">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">默认模型</label>
+                            <input type="text" class="form-control" id="f-default-model" placeholder="gpt-4o-mini / claude-3-5-sonnet">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Base URL</label>
+                            <input type="text" class="form-control" id="f-base-url" placeholder="https://api.openai.com/v1">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">API Key</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control key-mask" id="f-api-key" autocomplete="off">
+                                <button type="button" class="btn btn-outline-secondary" id="f-api-key-toggle" title="显示/隐藏">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="d-flex align-items-center">
+                                <label class="form-label mb-0">参考链接</label>
+                                <button type="button" class="btn btn-sm btn-outline-primary ms-auto" id="btn-add-ref">
+                                    <i class="bi bi-plus-lg"></i>添加
+                                </button>
+                            </div>
+                            <div id="ref-list" class="mt-2"></div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">备注</label>
+                            <textarea class="form-control" id="f-notes" rows="2" placeholder="使用场景、配额、注意事项等"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="btn-save">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+(() => {
+    const API_BASE = '/api/llm';
+    let allItems = [];
+    let activeCategory = '';
+    let maskKey = true;
+
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+    /**
+     * 跨场景的"复制到剪贴板"。
+     * - 优先 navigator.clipboard.writeText（secure context 才可用，HTTPS 或 localhost）。
+     * - 非 secure context（典型：http://192.168.x.x 内网访问）会让 clipboard 整个对象为
+     *   undefined / writeText 抛 NotAllowedError；这里 fallback 到临时 textarea + execCommand。
+     * - execCommand('copy') 已被部分浏览器标记为 deprecated 但**仍然**是非 HTTPS 下的唯一可行兜底。
+     * 返回 Promise<boolean>，调用方根据 false 决定是否展示"手动复制"对话框。
+     */
+    async function copyTextToClipboard(text) {
+        const str = String(text ?? '');
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(str);
+                return true;
+            }
+        } catch (_) { /* 走 fallback */ }
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = str;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.top = '-1000px';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            ta.setSelectionRange(0, str.length);
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            return !!ok;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    /** 双重 fallback 失败时给用户一个可手选的输入框，便于 Ctrl+C。 */
+    function promptManualCopy(text, tip) {
+        try { window.prompt(tip || '请手动复制以下内容：', text); }
+        catch (_) { alert(text); }
+    }
+
+    function categoryOf(item) { return (item.category || '其他') || '其他'; }
+
+    function fetchAll() {
+        const url = `${API_BASE}?mask=${maskKey ? 1 : 0}`;
+        return fetch(url, { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(j => {
+                allItems = Array.isArray(j.items) ? j.items : [];
+                render();
+            })
+            .catch(err => alert('加载失败：' + err.message));
+    }
+
+    function render() {
+        renderCategories();
+        renderItems();
+        renderCategoryOptions();
+    }
+
+    function renderCategories() {
+        const counts = new Map();
+        allItems.forEach(it => {
+            const c = categoryOf(it);
+            counts.set(c, (counts.get(c) || 0) + 1);
+        });
+        const list = $('category-list');
+        const categories = Array.from(counts.keys()).sort();
+        const html = [
+            `<a href="#" class="list-group-item list-group-item-action ${activeCategory === '' ? 'active' : ''}" data-category="">
+                全部 <span class="badge bg-secondary float-end">${allItems.length}</span>
+            </a>`
+        ];
+        for (const c of categories) {
+            const active = activeCategory === c ? 'active' : '';
+            html.push(`<a href="#" class="list-group-item list-group-item-action ${active}" data-category="${esc(c)}">
+                ${esc(c)} <span class="badge bg-secondary float-end">${counts.get(c)}</span>
+            </a>`);
+        }
+        list.innerHTML = html.join('');
+        list.querySelectorAll('a').forEach(a => {
+            a.addEventListener('click', e => {
+                e.preventDefault();
+                activeCategory = a.dataset.category || '';
+                render();
+            });
+        });
+    }
+
+    function renderCategoryOptions() {
+        const set = new Set(allItems.map(categoryOf));
+        ['OpenAI', 'Anthropic', '国产', '本地', 'Azure', '其他'].forEach(x => set.add(x));
+        $('category-options').innerHTML = Array.from(set).sort()
+            .map(c => `<option value="${esc(c)}">`).join('');
+    }
+
+    function itemMatchesSearch(it, q) {
+        if (!q) return true;
+        q = q.toLowerCase();
+        return [it.name, it.base_url, it.default_model, it.provider, it.notes]
+            .some(v => v && String(v).toLowerCase().includes(q));
+    }
+
+    function renderItems() {
+        const grid = $('items-grid');
+        const q = $('search-input').value.trim();
+        const list = allItems.filter(it =>
+            (!activeCategory || categoryOf(it) === activeCategory) &&
+            itemMatchesSearch(it, q)
+        );
+        $('current-category-title').textContent = activeCategory || '全部';
+        if (!list.length) {
+            grid.innerHTML = '';
+            $('empty-tip').classList.remove('d-none');
+            return;
+        }
+        $('empty-tip').classList.add('d-none');
+        grid.innerHTML = list.map(itemCard).join('');
+        grid.querySelectorAll('[data-action]').forEach(btn => {
+            btn.addEventListener('click', () => onAction(btn.dataset.action, Number(btn.dataset.id)));
+        });
+    }
+
+    function itemCard(it) {
+        const refs = (it.reference_links || []).map(r =>
+            `<span class="badge bg-light text-dark border ref-chip me-1 mb-1">
+                <a href="${esc(r.url)}" target="_blank" rel="noopener">
+                    <i class="bi bi-link-45deg"></i> ${esc(r.title || r.url)}
+                </a>
+            </span>`
+        ).join('');
+        const apiKey = esc(it.api_key || '');
+        return `
+        <div class="col-12 col-md-6 col-xl-4">
+            <div class="card llm-card h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="badge bg-primary-subtle text-primary border me-2">${esc(it.category || '其他')}</span>
+                        <h5 class="card-title mb-0 text-truncate" title="${esc(it.name)}">${esc(it.name)}</h5>
+                        <div class="ms-auto btn-group btn-group-sm">
+                            <button class="btn btn-outline-secondary" data-action="edit" data-id="${it.id}" title="编辑">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-outline-danger" data-action="delete" data-id="${it.id}" title="删除">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="small text-muted mb-1">
+                        <i class="bi bi-building me-1"></i>${esc(it.provider || '—')}
+                        <span class="mx-2">·</span>
+                        <i class="bi bi-cpu me-1"></i>${esc(it.default_model || '—')}
+                    </div>
+                    <div class="small mb-1 text-truncate" title="${esc(it.base_url || '')}">
+                        <i class="bi bi-link-45deg me-1"></i>${esc(it.base_url || '—')}
+                    </div>
+                    <div class="small d-flex align-items-center mb-2">
+                        <i class="bi bi-key me-1"></i>
+                        <code class="key-mask flex-grow-1 text-truncate">${apiKey || '—'}</code>
+                        ${apiKey ? `<button class="btn btn-sm btn-link copy-btn" data-action="copy-key" data-id="${it.id}" title="复制 API Key"><i class="bi bi-clipboard"></i></button>` : ''}
+                    </div>
+                    ${refs ? `<div class="mb-2">${refs}</div>` : ''}
+                    ${it.notes ? `<div class="small text-muted border-top pt-2">${esc(it.notes)}</div>` : ''}
+                </div>
+            </div>
+        </div>`;
+    }
+
+    async function onAction(action, id) {
+        const item = allItems.find(x => x.id === id);
+        if (action === 'edit') {
+            openEditModal(item);
+        } else if (action === 'delete') {
+            if (!confirm(`确定删除「${item.name}」？`)) return;
+            const r = await fetch(`${API_BASE}/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok || !j.success) { alert(j.error || '删除失败'); return; }
+            await fetchAll();
+        } else if (action === 'copy-key') {
+            // mask 模式下列表里的 api_key 是遮盖值，复制需向后端再请求明文
+            const r = await fetch(`${API_BASE}/${id}?mask=0`, { credentials: 'same-origin' });
+            const j = await r.json().catch(() => ({}));
+            if (!j.success) { alert(j.error || '读取失败'); return; }
+            const text = j.item.api_key || '';
+            const ok = await copyTextToClipboard(text);
+            if (ok) {
+                alert('已复制 API Key');
+            } else {
+                // 兜底：浏览器既不支持 clipboard 也禁用了 execCommand，则弹一个可手选的输入框
+                promptManualCopy(text, '请手动复制 API Key（Ctrl+C）');
+            }
+        }
+    }
+
+    /* ---------- 参考链接行渲染 ---------- */
+    function renderRefRows(list) {
+        const wrap = $('ref-list');
+        wrap.innerHTML = '';
+        (list || []).forEach(({ title, url }) => appendRefRow(title, url));
+        if (!wrap.children.length) appendRefRow('', '');
+    }
+
+    function appendRefRow(title, url) {
+        const wrap = $('ref-list');
+        const row = document.createElement('div');
+        row.className = 'input-group input-group-sm mb-2';
+        row.innerHTML = `
+            <input type="text" class="form-control ref-title" placeholder="标题" value="${esc(title || '')}">
+            <input type="text" class="form-control ref-url" placeholder="https://..." value="${esc(url || '')}">
+            <button type="button" class="btn btn-outline-danger ref-del"><i class="bi bi-x-lg"></i></button>
+        `;
+        row.querySelector('.ref-del').addEventListener('click', () => row.remove());
+        wrap.appendChild(row);
+    }
+
+    function collectRefs() {
+        return Array.from($('ref-list').querySelectorAll('.input-group')).map(row => ({
+            title: row.querySelector('.ref-title').value.trim(),
+            url: row.querySelector('.ref-url').value.trim(),
+        })).filter(x => x.url);
+    }
+
+    /* ---------- 新增 / 编辑 ---------- */
+    function openEditModal(item) {
+        $('llmModalTitle').textContent = item ? '编辑大模型配置' : '新增大模型配置';
+        $('f-id').value = item ? item.id : '';
+        $('f-name').value = item ? item.name : '';
+        $('f-category').value = item ? (item.category || '') : (activeCategory || '');
+        $('f-provider').value = item ? (item.provider || '') : '';
+        $('f-default-model').value = item ? (item.default_model || '') : '';
+        $('f-base-url').value = item ? (item.base_url || '') : '';
+        $('f-notes').value = item ? (item.notes || '') : '';
+        // 编辑时拉明文 api_key，避免遮盖值被回写
+        if (item) {
+            fetch(`${API_BASE}/${item.id}?mask=0`, { credentials: 'same-origin' })
+                .then(r => r.json())
+                .then(j => {
+                    if (j.success) {
+                        $('f-api-key').value = j.item.api_key || '';
+                        renderRefRows(j.item.reference_links || []);
+                    }
+                });
+        } else {
+            $('f-api-key').value = '';
+            renderRefRows([]);
+        }
+        $('f-api-key').type = 'password';
+        $('f-api-key-toggle').querySelector('i').className = 'bi bi-eye';
+        const m = bootstrap.Modal.getOrCreateInstance($('llmModal'));
+        m.show();
+    }
+
+    async function saveForm() {
+        const id = $('f-id').value;
+        const payload = {
+            name: $('f-name').value.trim(),
+            category: $('f-category').value.trim() || '其他',
+            provider: $('f-provider').value.trim(),
+            base_url: $('f-base-url').value.trim(),
+            api_key: $('f-api-key').value,
+            default_model: $('f-default-model').value.trim(),
+            notes: $('f-notes').value.trim(),
+            reference_links: collectRefs(),
+        };
+        if (!payload.name) { alert('名称不能为空'); return; }
+        const url = id ? `${API_BASE}/${id}` : API_BASE;
+        const method = id ? 'PUT' : 'POST';
+        const r = await fetch(url, {
+            method,
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.success) { alert(j.error || '保存失败'); return; }
+        bootstrap.Modal.getInstance($('llmModal')).hide();
+        await fetchAll();
+    }
+
+    /* ---------- 事件 ---------- */
+    $('btn-new').addEventListener('click', () => openEditModal(null));
+    $('btn-save').addEventListener('click', saveForm);
+    $('btn-add-ref').addEventListener('click', () => appendRefRow('', ''));
+    $('search-input').addEventListener('input', renderItems);
+    $('mask-toggle').addEventListener('change', e => {
+        maskKey = e.target.checked;
+        fetchAll();
+    });
+    $('f-api-key-toggle').addEventListener('click', () => {
+        const el = $('f-api-key');
+        const icon = $('f-api-key-toggle').querySelector('i');
+        if (el.type === 'password') {
+            el.type = 'text';
+            icon.className = 'bi bi-eye-slash';
+        } else {
+            el.type = 'password';
+            icon.className = 'bi bi-eye';
+        }
+    });
+
+    fetchAll();
+})();
+</script>
+</body>
+</html>

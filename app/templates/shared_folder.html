@@ -56,9 +56,9 @@
                             <p class="text-muted small">{{ file.modified }}</p>
                             
                             {% if file.is_dir %}
-                                <a href="{{ url_for('access_shared_file', share_id=file.public_share_id) }}" class="btn btn-sm btn-outline-primary">打开文件夹</a>
+                                <a href="{{ url_for('file.access_shared_file', share_id=file.public_share_id) }}" class="btn btn-sm btn-outline-primary">打开文件夹</a>
                             {% else %}
-                                <a href="{{ url_for('download_file_by_id', file_id=file.id, public=True) }}" class="btn btn-sm btn-outline-success">下载文件</a>
+                                <a href="{{ url_for('file.download_file_by_id', file_id=file.id) }}" class="btn btn-sm btn-outline-success">下载文件</a>
                             {% endif %}
                         </div>
                     </div>
@@ -73,7 +73,7 @@
         </div>
         
         <div class="text-center mt-5">
-            <a href="{{ url_for('login') }}" class="btn btn-outline-primary">登录到文件管理系统</a>
+            <a href="{{ url_for('auth.login') }}" class="btn btn-outline-primary">登录到文件管理系统</a>
         </div>
     </div>
     

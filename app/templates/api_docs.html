@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ meta.title }}</title>
+    <style>
+        :root { --bg: #0f1419; --card: #1a2332; --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --border: #30363d; }
+        body { font-family: system-ui, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; margin: 0; padding: 1.5rem; }
+        h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+        .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+        .toc { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 2rem; }
+        .toc h2 { font-size: 1rem; margin: 0 0 0.75rem 0; color: var(--accent); }
+        .toc ul { margin: 0; padding-left: 1.25rem; }
+        .toc a { color: var(--accent); text-decoration: none; }
+        .toc a:hover { text-decoration: underline; }
+        section { margin-bottom: 2rem; }
+        section h2 { font-size: 1.15rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; margin-top: 0; }
+        .ep { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.1rem; margin-bottom: 0.85rem; }
+        .method { display: inline-block; font-weight: 600; font-size: 0.75rem; padding: 0.15rem 0.45rem; border-radius: 4px; margin-right: 0.5rem; }
+        .m-get { background: #238636; color: #fff; }
+        .m-post { background: #1f6feb; color: #fff; }
+        .m-put { background: #8957e5; color: #fff; }
+        .m-delete { background: #da3633; color: #fff; }
+        .m-local { background: var(--muted); color: #fff; }
+        .path { font-family: ui-monospace, monospace; font-size: 0.9rem; word-break: break-all; }
+        .auth { color: var(--muted); font-size: 0.85rem; margin: 0.35rem 0; }
+        .desc { margin: 0.4rem 0; }
+        .params { font-size: 0.88rem; color: var(--muted); margin: 0.25rem 0 0 0; }
+        pre { background: #010409; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 1rem; overflow-x: auto; font-size: 0.8rem; margin: 0.5rem 0 0 0; white-space: pre-wrap; word-break: break-all; }
+        footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <h1>{{ meta.title }}</h1>
+    <p class="sub">版本 {{ meta.version }} · {{ meta.base_url_hint }} · 机器可读：<a href="{{ url_for('docs.api_docs_json') }}">/api/docs.json</a></p>
+
+    <nav class="toc" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            {% for s in sections %}
+            <li><a href="#{{ s.id }}">{{ s.title }}</a></li>
+            {% endfor %}
+        </ul>
+    </nav>
+
+    {% for s in sections %}
+    <section id="{{ s.id }}">
+        <h2>{{ s.title }}</h2>
+        {% for ep in s.endpoints %}
+        <article class="ep">
+            <div>
+                {% set m = ep.method.upper() %}
+                <span class="method {% if m == 'GET' %}m-get{% elif m == 'POST' %}m-post{% elif m == 'PUT' %}m-put{% elif m == 'DELETE' %}m-delete{% else %}m-local{% endif %}">{{ ep.method }}</span>
+                <span class="path">{{ ep.path }}</span>
+            </div>
+            <div class="auth">鉴权：{{ ep.auth }}</div>
+            <p class="desc">{{ ep.description }}</p>
+            {% if ep.params %}
+            <p class="params">参数：{{ ep.params | join('；') }}</p>
+            {% endif %}
+            {% if ep.tests %}
+            <pre>{{ ep.tests }}</pre>
+            {% endif %}
+        </article>
+        {% endfor %}
+    </section>
+    {% endfor %}
+
+    <footer>
+        由应用内数据生成 · 修改 <code>app/api_docs_data.py</code> 后刷新本页即可。
+    </footer>
+</body>
+</html>

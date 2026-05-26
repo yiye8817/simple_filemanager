@@ -216,24 +216,88 @@ async function openVersionModal(file) {
     // modal.show();
 }
 
-// 获取自动版本号
+function setAutoVersionLoading(on, message) {
+    const btn = document.getElementById('auto-version-btn');
+    const st = document.getElementById('auto-version-status');
+    if (btn) {
+        btn.disabled = !!on;
+        if (on) {
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>处理中';
+        } else {
+            btn.textContent = '自动生成';
+        }
+    }
+    if (st) {
+        if (on && message) {
+            st.classList.remove('d-none');
+            st.textContent = message;
+        } else {
+            st.classList.add('d-none');
+            st.textContent = '';
+        }
+    }
+}
+
+// 获取自动版本号（Android 应用：直接解析 APK/AAB 内 Manifest 的版本名与 versionCode）
 async function getAutoVersion() {
     const form = document.getElementById('versionForm');
     const formData = new FormData(form);
-    
-    const data = {
-        system: formData.get('system'),
-        type: formData.get('type'),
-        vendor: formData.get('vendor'),
-        device_type: formData.get('device_type')
-    };
-    
-    // if (!data.type || !data.vendor || !data.device_type) {
-    //     alert('请先填写类型、厂商和设备类型');
-    //     return;
-    // }
-    
+
+    const isAndroidApp = currentFile && (
+        currentFile.type === 'applications_android' ||
+        (currentFile.name && /\.(apk|aab)$/i.test(currentFile.name))
+    );
+
+    const hint = isAndroidApp && currentFile && currentFile.id
+        ? '正在解析 APK（可能需数十秒），请稍候…'
+        : '正在计算版本号…';
+    setAutoVersionLoading(true, hint);
+
     try {
+        if (isAndroidApp && currentFile.id) {
+            try {
+                const apkRes = await axios.post('/api/version/apk-version-from-file', {
+                    file_id: currentFile.id
+                });
+                if (apkRes.data && apkRes.data.success) {
+                    document.getElementById('versionNumber').value = apkRes.data.version;
+                    try {
+                        const extraEl = form.elements['extra_fields'];
+                        if (extraEl) {
+                            const extra = JSON.parse(extraEl.value || '{}');
+                            if (apkRes.data.version_code != null) {
+                                extra.android_version_code = apkRes.data.version_code;
+                            }
+                            if (apkRes.data.version_name != null) {
+                                extra.android_version_name = apkRes.data.version_name;
+                            }
+                            if (apkRes.data.package) {
+                                extra.android_package = apkRes.data.package;
+                            }
+                            extraEl.value = JSON.stringify(extra, null, 2);
+                        }
+                    } catch (e) {
+                        console.warn('merge extra_fields', e);
+                    }
+                    return;
+                }
+            } catch (err) {
+                const msg = err.response?.data?.error || err.message || '';
+                console.warn('APK 解析失败，将尝试规则递增版本号:', msg);
+                if (err.response?.status === 422 || err.response?.status === 400) {
+                    alert('无法从 APK 读取版本: ' + (msg || '请确认文件为有效应用包'));
+                    return;
+                }
+            }
+        }
+
+        const data = {
+            system: formData.get('system'),
+            type: formData.get('type'),
+            vendor: formData.get('vendor'),
+            device_type: formData.get('device_type')
+        };
+
         const response = await axios.post('/api/version/auto-version', data);
         if (response.data.success) {
             document.getElementById('versionNumber').value = response.data.version;
@@ -242,7 +306,9 @@ async function getAutoVersion() {
         }
     } catch (error) {
         console.error('获取版本号失败:', error);
-        alert('获取版本号失败');
+        alert('获取版本号失败: ' + (error.response?.data?.error || error.message || '网络错误'));
+    } finally {
+        setAutoVersionLoading(false);
     }
 }
 
@@ -279,9 +345,8 @@ async function saveVersion() {
         file_size: currentFile.size,
         //parseInt(formData.get('file_size')),
         extra_fields: extraFields,
-        file_id:currentFile.id,
-        user_id:currentFile.user_id,
-        checksum_type:formData.get('checksum_type')
+        file_id: currentFile.id,
+        checksum_type: formData.get('checksum_type')
     };
     
     try {

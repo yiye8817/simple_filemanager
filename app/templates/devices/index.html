@@ -1,0 +1,670 @@
+{# 设备管理页：远程设备 + 命令 + tar.gz 服务 三栏布局
+   左：设备列表 + 搜索 + 新建
+   右上：设备详情 + 命令终端
+   右下：设备上的服务卡片
+#}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设备管理 · 云端文件</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <!-- xterm.js: 网页 SSH 终端 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+    <style>
+        body { background: #f6f7fb; }
+        .dev-card { cursor: pointer; transition: box-shadow .15s ease-in-out; }
+        .dev-card.active { border-color: #0d6efd; box-shadow: 0 0 0 0.15rem rgba(13,110,253,.18); }
+        .dev-card:hover:not(.active) { box-shadow: 0 4px 14px rgba(0,0,0,.06); }
+        .status-dot { width: .55rem; height: .55rem; border-radius: 50%; display: inline-block; }
+        .status-online { background: #198754; box-shadow: 0 0 0 2px rgba(25,135,84,.18); }
+        .status-offline { background: #adb5bd; }
+        .meter-row { font-size: .78rem; }
+        .meter-row .label { width: 36px; color: #6c757d; }
+        .meter-row .progress { flex: 1; height: 6px; }
+        .meter-row .meter-text { width: 70px; text-align: right; color: #6c757d; }
+        .term-pane {
+            background: #0b1020; color: #d6deeb;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: .82rem; line-height: 1.45;
+            padding: 12px 14px; border-radius: 6px;
+            min-height: 220px; max-height: 460px; overflow: auto;
+            white-space: pre-wrap; word-break: break-all;
+        }
+        .term-pane .prompt { color: #82aaff; }
+        .term-pane .err { color: #ff6b6b; }
+        .term-pane .ok { color: #c3e88d; }
+        .term-pane .pending { color: #ffcb6b; }
+        .term-input {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            background: #0b1020; color: #d6deeb; border-color: #1f2940;
+        }
+        .term-input:focus { background: #0b1020; color: #d6deeb; border-color: #82aaff; }
+        .svc-row { border-left: 3px solid transparent; }
+        .svc-row.status-running { border-left-color: #198754; }
+        .svc-row.status-stopped { border-left-color: #6c757d; }
+        .svc-row.status-failed { border-left-color: #dc3545; }
+        .svc-row.status-installing { border-left-color: #0dcaf0; }
+        .badge-port { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .token-pill {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: .78rem; background: #f8f9fa; padding: 2px 8px; border-radius: 999px;
+            word-break: break-all;
+        }
+        .kv-row { font-size: .85rem; }
+        .kv-row .k { color: #6c757d; min-width: 96px; }
+        .empty-pane { color: #98a3b3; }
+        .stat-card { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 10px 12px; }
+        .stat-card .stat-title { font-size: .7rem; color: #6c757d; letter-spacing: .04em; text-transform: uppercase; }
+        .stat-card .stat-value { font-size: 1.15rem; font-weight: 600; }
+        .copy-btn { cursor: pointer; }
+        .copy-btn:hover { color: #0d6efd; }
+        /* 折叠相关样式由 static/js/collapse.js 动态注入, 这里只放本页独有的 */
+        /* 左栏 toggle (隐藏到屏幕左边) */
+        #dev-sidebar-toggle {
+            position: sticky; top: 8px; z-index: 5;
+            background: #fff; border: 1px solid #dee2e6;
+            border-radius: 999px; padding: 2px 10px;
+            cursor: pointer; font-size: .8rem; color: #495057;
+            box-shadow: 0 1px 3px rgba(0,0,0,.04);
+        }
+        #dev-sidebar-toggle:hover { color: #0d6efd; border-color: #0d6efd; }
+        /* 隧道卡片里 22 端口高亮 */
+        .tunnel-row.is-ssh { background: #fff8e1; }
+        .tunnel-row .ssh-cmd {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: .78rem; word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand navbar-dark bg-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/"><i class="bi bi-cloud-fill me-1"></i>云端文件管理</a>
+        <ul class="navbar-nav me-auto">
+            <li class="nav-item"><a class="nav-link" href="/">文件</a></li>
+            <li class="nav-item"><a class="nav-link" href="/api/">资源</a></li>
+            <li class="nav-item"><a class="nav-link" href="/api/query/query.html">版本</a></li>
+            <li class="nav-item"><a class="nav-link" href="/llm">大模型</a></li>
+            <li class="nav-item"><a class="nav-link" href="/services">服务</a></li>
+            <li class="nav-item"><a class="nav-link active" aria-current="page" href="/devices">设备</a></li>
+        </ul>
+        <span class="navbar-text text-white-50 me-3"><i class="bi bi-person-circle me-1"></i>{{ user_name }}</span>
+    </div>
+</nav>
+
+<div class="container-fluid py-3">
+    <div class="row g-3" id="dev-row">
+        <!-- 左：设备列表 -->
+        <div class="col-lg-4" id="dev-sidebar">
+            <div class="card mb-3">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex gap-2 align-items-center">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input class="form-control" id="dev-search"
+                                   placeholder="按名称 / IP / 标签 / 主机名搜索…" autocomplete="off">
+                        </div>
+                        <div class="form-check form-switch m-0 flex-shrink-0">
+                            <input class="form-check-input" type="checkbox" id="dev-only-online">
+                            <label class="form-check-label small text-muted" for="dev-only-online">仅在线</label>
+                        </div>
+                        <button class="btn btn-link btn-sm p-0 flex-shrink-0" id="dev-refresh" title="刷新">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3" data-collapsible="1" data-collapse-key="dev-create" data-default-collapsed="1">
+                <div class="card-header d-flex align-items-center py-2">
+                    <i class="bi bi-plus-circle me-2"></i>
+                    <span class="fw-semibold">注册新设备</span>
+                    <span class="ms-2 text-muted small">(v0.2+ agent 自助 enroll, 一般不需要在这里手动建)</span>
+                </div>
+                <div class="card-body py-3">
+                    <form id="dev-create-form">
+                        <div class="mb-2">
+                            <label class="form-label small text-muted mb-1">设备名 <span class="text-danger">*</span></label>
+                            <input class="form-control form-control-sm" name="name" maxlength="120"
+                                   required placeholder="如 home-pi / idc-srv1">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small text-muted mb-1">位置</label>
+                            <input class="form-control form-control-sm" name="location" maxlength="255"
+                                   placeholder="北京 · 家庭网络 / 上海 · IDC-2">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small text-muted mb-1">标签 (逗号分隔)</label>
+                            <input class="form-control form-control-sm" name="tags" maxlength="255"
+                                   placeholder="prod, gpu, arm64">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small text-muted mb-1">备注</label>
+                            <textarea class="form-control form-control-sm" name="description" rows="2"
+                                      maxlength="512" placeholder="可选"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-100" id="dev-create-btn">
+                            <i class="bi bi-plus-lg me-1"></i>创建设备 (拿到 token)
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card" data-collapsible="1" data-collapse-key="dev-list">
+                <div class="card-header d-flex align-items-center py-2">
+                    <i class="bi bi-hdd-stack me-2"></i>
+                    <span class="fw-semibold">设备列表</span>
+                    <span class="text-muted small ms-2" id="dev-count">0</span>
+                    <span class="ms-auto small text-muted" id="dev-updated">--</span>
+                </div>
+                <div class="card-body p-0">
+                    <div id="dev-list" class="list-group list-group-flush">
+                        <div class="text-center py-4 empty-pane">加载中…</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右：详情 + 终端 + 服务 -->
+        <div class="col-lg-8" id="dev-main">
+            <!-- 左栏收起 / 展开按钮; 不依赖具体 modal 状态, 任何时候都可点 -->
+            <div class="mb-2">
+                <button id="dev-sidebar-toggle" type="button" title="折叠/展开设备列表 (左侧)">
+                    <i class="bi bi-chevron-double-left me-1"></i><span class="d-none d-md-inline">隐藏设备列表</span>
+                </button>
+            </div>
+            <div id="dev-empty" class="card">
+                <div class="card-body text-center py-5 empty-pane">
+                    <i class="bi bi-pc-display" style="font-size:2.2rem;"></i>
+                    <div class="mt-2">从左侧选择一台设备查看详情, 或先创建一台新设备。</div>
+                    <div class="small mt-2">客户端代码位于 <code>clients/device_agent/</code>, 拿到 token 后即可连入。</div>
+                </div>
+            </div>
+
+            <div id="dev-detail" style="display:none;">
+                <!-- 设备基本信息 -->
+                <div class="card mb-3" data-collapsible="1" data-collapse-key="dd-base">
+                    <div class="card-header d-flex align-items-center">
+                        <span class="status-dot me-2" id="dd-dot"></span>
+                        <span class="fw-semibold" id="dd-name">--</span>
+                        <span class="badge ms-2" id="dd-online-badge">--</span>
+                        <span class="text-muted small ms-2" id="dd-last-seen">--</span>
+                        <div class="ms-auto d-flex gap-2">
+                            <button class="btn btn-outline-secondary btn-sm" id="dd-edit-btn"
+                                    data-bs-toggle="modal" data-bs-target="#dev-edit-modal">
+                                <i class="bi bi-pencil me-1"></i>编辑
+                            </button>
+                            <button class="btn btn-outline-info btn-sm" id="dd-token-btn"
+                                    data-bs-toggle="modal" data-bs-target="#dev-token-modal">
+                                <i class="bi bi-key me-1"></i>Token
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" id="dd-delete-btn">
+                                <i class="bi bi-trash me-1"></i>删除
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- 顶部 4 个紧凑指标卡 (沿用旧 ID, 兼容现有 JS) -->
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-3"><div class="stat-card">
+                                <div class="stat-title">CPU</div>
+                                <div class="stat-value" id="dd-cpu">--</div>
+                                <div class="progress mt-1" style="height:4px;"><div class="progress-bar" id="dd-cpu-bar" style="width:0%"></div></div>
+                            </div></div>
+                            <div class="col-md-3"><div class="stat-card">
+                                <div class="stat-title">内存</div>
+                                <div class="stat-value" id="dd-mem">--</div>
+                                <div class="progress mt-1" style="height:4px;"><div class="progress-bar bg-success" id="dd-mem-bar" style="width:0%"></div></div>
+                            </div></div>
+                            <div class="col-md-3"><div class="stat-card">
+                                <div class="stat-title">磁盘 /</div>
+                                <div class="stat-value" id="dd-disk">--</div>
+                                <div class="progress mt-1" style="height:4px;"><div class="progress-bar bg-warning" id="dd-disk-bar" style="width:0%"></div></div>
+                            </div></div>
+                            <div class="col-md-3"><div class="stat-card">
+                                <div class="stat-title">GPU</div>
+                                <div class="stat-value" id="dd-gpu">--</div>
+                                <div class="small text-muted" id="dd-gpu-name">--</div>
+                            </div></div>
+                        </div>
+
+                        <!-- 顶部基础元信息 (设备名/UID/位置/网络) -->
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <div class="kv-row d-flex mb-1"><span class="k">设备 UID</span><span class="text-truncate" id="dd-uid">--</span></div>
+                                <div class="kv-row d-flex mb-1"><span class="k">主机名</span><span class="text-truncate" id="dd-host">--</span></div>
+                                <div class="kv-row d-flex mb-1"><span class="k">操作系统</span><span class="text-truncate" id="dd-os">--</span></div>
+                                <div class="kv-row d-flex mb-1"><span class="k">架构</span><span id="dd-arch">--</span></div>
+                                <div class="kv-row d-flex mb-1"><span class="k">Agent</span><span id="dd-agent">--</span></div>
+                                <div class="kv-row d-flex mb-1"><span class="k">运行时长</span><span id="dd-uptime">--</span></div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="kv-row d-flex mb-1"><span class="k">位置</span><span id="dd-loc">--</span></div>
+                                <div class="kv-row d-flex mb-1"><span class="k">标签</span><span id="dd-tags">--</span></div>
+                                <div class="kv-row d-flex mb-1"><span class="k">内网 IP</span><span id="dd-localip">--</span></div>
+                                <div class="kv-row d-flex mb-1"><span class="k">公网 IP</span><span id="dd-pubip">--</span></div>
+                                <div class="kv-row d-flex mb-1"><span class="k">来源 IP</span><span id="dd-lastip">--</span></div>
+                                <div class="kv-row d-flex mb-1"><span class="k">穿透信息</span><span id="dd-tunnel" class="text-truncate">--</span></div>
+                            </div>
+                        </div>
+
+                        <div id="dd-desc" class="alert alert-light border mt-3 mb-0 py-2 small d-none"></div>
+                    </div>
+                </div>
+
+                <!-- ============ 硬件详情区 ============ -->
+                <div class="card mb-3" id="hw-card" data-collapsible="1" data-collapse-key="hw-card">
+                    <div class="card-header d-flex align-items-center">
+                        <i class="bi bi-cpu me-2"></i>
+                        <span class="fw-semibold">硬件详情</span>
+                        <span class="text-muted small ms-2" id="hw-ts">--</span>
+                        <button class="btn btn-link btn-sm p-0 ms-auto" id="hw-refresh" title="立即刷新">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <ul class="nav nav-tabs mb-2" id="hw-tabs" role="tablist">
+                            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#hw-cpu">CPU</button></li>
+                            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#hw-mem">内存</button></li>
+                            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#hw-disk">磁盘</button></li>
+                            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#hw-gpu">GPU</button></li>
+                            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#hw-net">网络</button></li>
+                            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#hw-sys">系统</button></li>
+                            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#hw-raw">原始 JSON</button></li>
+                        </ul>
+                        <div class="tab-content">
+                            <div class="tab-pane fade show active" id="hw-cpu">
+                                <div class="row g-3">
+                                    <div class="col-md-7">
+                                        <div class="kv-row d-flex mb-1"><span class="k">型号</span><span class="text-truncate" id="hwc-model">--</span></div>
+                                        <div class="kv-row d-flex mb-1"><span class="k">物理 / 逻辑核心</span><span id="hwc-cores">--</span></div>
+                                        <div class="kv-row d-flex mb-1"><span class="k">当前频率</span><span id="hwc-freq">--</span></div>
+                                        <div class="kv-row d-flex mb-1"><span class="k">最大 / 最小频率</span><span id="hwc-freq-range">--</span></div>
+                                        <div class="kv-row d-flex mb-1"><span class="k">使用率</span><span id="hwc-percent">--</span></div>
+                                        <div class="kv-row d-flex mb-1"><span class="k">负载 (1/5/15m)</span><span id="hwc-load">--</span></div>
+                                        <div class="kv-row d-flex mb-1"><span class="k">上下文切换 / 中断</span><span id="hwc-ctxsw">--</span></div>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <div class="text-muted small mb-1">每核占用率</div>
+                                        <div id="hwc-percore" class="d-flex flex-column gap-1"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="hw-mem">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="kv-row d-flex mb-1"><span class="k">物理内存总计</span><span id="hwm-total">--</span></div>
+                                        <div class="kv-row d-flex mb-1"><span class="k">已用</span><span id="hwm-used">--</span></div>
+                                        <div class="kv-row d-flex mb-1"><span class="k">可用</span><span id="hwm-avail">--</span></div>
+                                        <div class="progress mb-3" style="height: 8px;"><div class="progress-bar bg-success" id="hwm-bar" style="width:0%"></div></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="kv-row d-flex mb-1"><span class="k">Swap 总计</span><span id="hwm-swap-total">--</span></div>
+                                        <div class="kv-row d-flex mb-1"><span class="k">Swap 已用</span><span id="hwm-swap-used">--</span></div>
+                                        <div class="progress mb-3" style="height: 8px;"><div class="progress-bar bg-secondary" id="hwm-swap-bar" style="width:0%"></div></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="hw-disk">
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle small mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>挂载点</th><th>设备</th><th>文件系统</th>
+                                                <th>容量</th><th class="text-end">已用</th><th class="text-end">可用</th>
+                                                <th style="min-width:180px;">使用率</th><th>型号</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="hwd-tbody"><tr><td colspan="8" class="text-muted text-center">无数据</td></tr></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="hw-gpu">
+                                <div id="hwg-list" class="d-flex flex-column gap-2"><div class="text-muted small">无 GPU 数据 (设备未装 nvidia-smi 或没有 NVIDIA GPU)</div></div>
+                            </div>
+                            <div class="tab-pane fade" id="hw-net">
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle small mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>网卡</th><th>状态</th><th>MAC</th>
+                                                <th>IPv4</th><th>IPv6</th><th>速率</th><th>MTU</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="hwn-tbody"><tr><td colspan="7" class="text-muted text-center">无数据</td></tr></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="hw-sys">
+                                <div class="row g-2" id="hws-grid"></div>
+                            </div>
+                            <div class="tab-pane fade" id="hw-raw">
+                                <pre class="term-pane mb-0" id="hw-raw-json" style="max-height: 380px;"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FRPC 隧道卡片 (数据来自当前选中设备 agent 上报的 stats.frpc_tunnels) -->
+                <div class="card mb-3" id="dd-tunnels-card" data-collapsible="1" data-collapse-key="dd-tunnels">
+                    <div class="card-header d-flex align-items-center">
+                        <i class="bi bi-shuffle me-2"></i>
+                        <span class="fw-semibold">设备 frpc 隧道</span>
+                        <span class="text-muted small ms-2">由 agent 在设备本机扫 frpc 进程上报; 22 端口可一键网页 SSH 登录该设备</span>
+                        <div class="ms-auto d-flex align-items-center gap-2">
+                            <input class="form-control form-control-sm" id="tun-ssh-user"
+                                   value="root" maxlength="64" title="ssh 登录用的用户名" style="max-width: 110px;">
+                            <button class="btn btn-outline-secondary btn-sm" id="tun-refresh" title="刷新">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="tun-summary" class="small text-muted mb-2">先在左边选一台设备</div>
+                        <div id="tun-list"></div>
+                    </div>
+                </div>
+
+                <!-- 远程终端 -->
+                <div class="card mb-3" data-collapsible="1" data-collapse-key="dd-term">
+                    <div class="card-header d-flex align-items-center">
+                        <i class="bi bi-terminal me-2"></i>
+                        <span class="fw-semibold">远程终端</span>
+                        <span class="text-muted small ms-2" id="term-hint">命令异步下发, agent 拉到后执行并回传 stdout / stderr</span>
+                        <div class="ms-auto d-flex align-items-center gap-2">
+                            <input class="form-control form-control-sm" id="term-cwd"
+                                   placeholder="cwd (可选, 例如 /tmp)" style="max-width: 200px;">
+                            <input class="form-control form-control-sm" id="term-timeout" type="number"
+                                   min="1" max="600" value="30" style="max-width: 90px;" title="超时秒">
+                            <button class="btn btn-outline-secondary btn-sm" id="term-clear" title="清空"><i class="bi bi-eraser"></i></button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="term-pane mb-2" id="term-pane"><span class="empty-pane">$ 等待输入命令…</span></div>
+                        <form id="term-form" class="d-flex gap-2">
+                            <span class="input-group-text term-input">$</span>
+                            <input class="form-control term-input" id="term-cmd" placeholder="键入命令 (Enter 发送, ↑↓ 历史)" autocomplete="off">
+                            <button class="btn btn-primary" type="submit" id="term-send"><i class="bi bi-send"></i></button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 设备服务 -->
+                <div class="card" data-collapsible="1" data-collapse-key="dd-svc">
+                    <div class="card-header d-flex align-items-center">
+                        <i class="bi bi-box-seam me-2"></i>
+                        <span class="fw-semibold">设备上的服务 (tar.gz)</span>
+                        <div class="ms-auto d-flex gap-2">
+                            <button class="btn btn-link btn-sm p-0" id="svc-refresh-btn" title="刷新"><i class="bi bi-arrow-clockwise"></i></button>
+                            <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#svc-upload-modal">
+                                <i class="bi bi-cloud-upload me-1"></i>上传 tar.gz
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="dev-svc-list" class="list-group list-group-flush">
+                            <div class="text-center py-4 empty-pane">还没有上传任何服务。</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 创建后 Token 展示 Modal -->
+<div class="modal fade" id="dev-new-token-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-shield-check me-2"></i>设备已创建</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">请把下面信息填到 agent 的配置里 (<code>device_agent.toml</code> / 环境变量):</p>
+        <div class="mb-3">
+          <label class="form-label small text-muted mb-1">设备 UID</label>
+          <div class="input-group input-group-sm">
+            <input class="form-control" id="nt-uid" readonly>
+            <button class="btn btn-outline-secondary copy-btn" data-copy-target="#nt-uid"><i class="bi bi-clipboard"></i></button>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small text-muted mb-1">设备 Token <span class="text-danger">(只显示一次)</span></label>
+          <div class="input-group input-group-sm">
+            <input class="form-control" id="nt-token" readonly>
+            <button class="btn btn-outline-secondary copy-btn" data-copy-target="#nt-token"><i class="bi bi-clipboard"></i></button>
+          </div>
+        </div>
+        <div class="alert alert-info py-2 mb-2 small">
+          客户端启动命令示例:
+        </div>
+        <pre class="small bg-light p-2 mb-0" id="nt-cmd">--</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 编辑设备 Modal -->
+<div class="modal fade" id="dev-edit-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>编辑设备</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <form id="dev-edit-form">
+      <div class="modal-body">
+        <div class="mb-2">
+          <label class="form-label small text-muted mb-1">设备名</label>
+          <input class="form-control form-control-sm" name="name" required maxlength="120">
+        </div>
+        <div class="mb-2">
+          <label class="form-label small text-muted mb-1">位置</label>
+          <input class="form-control form-control-sm" name="location" maxlength="255">
+        </div>
+        <div class="mb-2">
+          <label class="form-label small text-muted mb-1">标签</label>
+          <input class="form-control form-control-sm" name="tags" maxlength="255">
+        </div>
+        <div class="mb-2">
+          <label class="form-label small text-muted mb-1">备注</label>
+          <textarea class="form-control form-control-sm" name="description" rows="3" maxlength="512"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" type="button" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary btn-sm" type="submit">保存</button>
+      </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- 重置 Token Modal -->
+<div class="modal fade" id="dev-token-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-key me-2"></i>设备 Token</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <p class="mb-2">为了安全, token 不会持久显示。重新生成会立刻让旧 token 失效, 已有 agent 必须更新配置才能继续工作。</p>
+        <div class="alert alert-warning py-2 small">仅在设备被泄露或客户端配置丢失时操作。</div>
+        <div id="dev-token-new" class="d-none">
+          <label class="form-label small text-muted mb-1">新 Token (只显示一次)</label>
+          <div class="input-group input-group-sm">
+            <input class="form-control" id="dev-token-text" readonly>
+            <button class="btn btn-outline-secondary copy-btn" data-copy-target="#dev-token-text"><i class="bi bi-clipboard"></i></button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">关闭</button>
+        <button class="btn btn-warning btn-sm" id="dev-token-rotate"><i class="bi bi-arrow-repeat me-1"></i>生成新 Token</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 上传服务 Modal -->
+<div class="modal fade" id="svc-upload-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title"><i class="bi bi-cloud-upload me-2"></i>上传服务到设备</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <form id="svc-upload-form" enctype="multipart/form-data">
+      <div class="modal-body">
+        <div class="alert alert-light border py-2 mb-3 small">
+          归档需包含可执行的 <code>run.sh</code>, 设备 agent 拿到后会解压并执行 <code>bash run.sh &lt;port&gt; &lt;run_args&gt;</code>。
+        </div>
+        <div class="mb-2">
+          <label class="form-label small text-muted mb-1">服务名 <span class="text-danger">*</span></label>
+          <input class="form-control form-control-sm" name="name" required maxlength="120" placeholder="如 word-server">
+        </div>
+        <div class="row g-2">
+          <div class="col-md-6 mb-2">
+            <label class="form-label small text-muted mb-1">本地端口 (传给 run.sh)</label>
+            <input class="form-control form-control-sm" name="local_port" type="number" min="1" max="65535" placeholder="8080">
+          </div>
+          <div class="col-md-6 mb-2">
+            <label class="form-label small text-muted mb-1">附加参数</label>
+            <input class="form-control form-control-sm" name="run_args" maxlength="255" placeholder="--prod --workers=2">
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small text-muted mb-1">环境变量 (JSON 对象, 可选)</label>
+          <textarea class="form-control form-control-sm font-monospace" name="env_json" rows="2" placeholder='{"DEBUG": "0"}'></textarea>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small text-muted mb-1">归档文件 (.tar.gz) <span class="text-danger">*</span></label>
+          <input class="form-control form-control-sm" type="file" name="archive" accept=".tar.gz,.tgz,application/gzip" required>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="auto_install" value="1" id="svc-auto-install" checked>
+          <label class="form-check-label small" for="svc-auto-install">立即下发 install 任务 (取消则只入库, 之后点"启动")</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" type="button" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary btn-sm" type="submit" id="svc-upload-btn"><i class="bi bi-cloud-upload me-1"></i>上传</button>
+      </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- 服务日志 Modal -->
+<div class="modal fade" id="svc-log-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-terminal me-2"></i><span id="svc-log-name">服务日志</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex align-items-center mb-2">
+          <span class="small text-muted" id="svc-log-meta">--</span>
+          <button class="btn btn-outline-secondary btn-sm ms-auto me-2" id="svc-log-copy" title="复制全部日志">
+            <i class="bi bi-clipboard me-1"></i>复制
+          </button>
+          <button class="btn btn-outline-primary btn-sm" id="svc-log-fetch"><i class="bi bi-cloud-download me-1"></i>拉取最新日志</button>
+        </div>
+        <pre class="term-pane mb-0" id="svc-log-pane" style="max-height:none;">(尚未拉取)</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1080;">
+    <div class="toast align-items-center text-bg-dark border-0" id="dev-toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body" id="dev-toast-body">…</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="关闭"></button>
+        </div>
+    </div>
+</div>
+
+<!-- SSH 网页终端 Modal -->
+<div class="modal fade" id="ssh-term-modal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-fullscreen modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title">
+                    <i class="bi bi-terminal me-1"></i>网页 SSH 终端
+                    <span class="badge bg-secondary ms-2" id="ssh-term-target">--</span>
+                    <span class="badge ms-2" id="ssh-term-status">未连接</span>
+                </h5>
+                <div class="ms-auto d-flex gap-2 align-items-center">
+                    <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="ssh-term-reconnect">
+                        <i class="bi bi-arrow-clockwise me-1"></i>重连
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0" style="background:#0b1020;">
+                <!-- 登录表单 -->
+                <div id="ssh-term-login" class="p-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">主机 (server / IP)</label>
+                            <input class="form-control" id="ssh-host" maxlength="200" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label text-muted small">端口</label>
+                            <input class="form-control" id="ssh-port" type="number" min="1" max="65535" value="22">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-muted small">用户名</label>
+                            <input class="form-control" id="ssh-user-input" maxlength="64" value="root" required>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label text-muted small">
+                                密码 <span class="text-muted">(可空 - 改用私钥)</span>
+                            </label>
+                            <input class="form-control" id="ssh-pass" type="password" autocomplete="new-password">
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button class="btn btn-primary w-100" id="ssh-connect-btn">
+                                <i class="bi bi-plug me-1"></i>连接
+                            </button>
+                        </div>
+                        <div class="col-12">
+                            <details>
+                                <summary class="text-muted small" style="cursor:pointer;">使用私钥 (PEM)</summary>
+                                <div class="mt-2 row g-2">
+                                    <div class="col-md-8">
+                                        <textarea class="form-control font-monospace" id="ssh-pkey"
+                                                  rows="4" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;..."></textarea>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label text-muted small">私钥 passphrase (可选)</label>
+                                        <input class="form-control" id="ssh-pkey-pass" type="password" autocomplete="new-password">
+                                    </div>
+                                </div>
+                            </details>
+                        </div>
+                        <div class="col-12">
+                            <div class="alert alert-info py-2 mb-0 small">
+                                <i class="bi bi-info-circle me-1"></i>
+                                凭据仅暂存在服务器内存中 5 分钟, WebSocket 一次性消费; 不写盘、不进日志。
+                                输错可重连。所有数据流走当前同源 WSS, 跟 Web 登录共用 cookie。
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- xterm.js 容器 -->
+                <div id="ssh-term-pane" style="display:none; padding:6px; height: calc(100vh - 56px);"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+<script src="{{ url_for('static', filename='js/collapse.js') }}"></script>
+<script src="{{ url_for('static', filename='devices/js/main.js') }}"></script>
+</body>
+</html>

@@ -17,6 +17,10 @@ def get_user():
     if not user:
         return jsonify({'error': '用户不存在'}), 404
     
+    if not user.api_key:
+        user.generate_api_key()
+        db.session.commit()
+    
     return jsonify({
         'id': user.id,
         'username': user.username,
@@ -24,6 +28,19 @@ def get_user():
         'email': user.email,
         'api_key': user.api_key
     })
+
+
+@user_bp.route('/api/user/api-key/regenerate', methods=['POST'])
+@login_required
+def regenerate_user_api_key():
+    """网页会话下重新生成 API 密钥（与 JWT 的 /api/auth/api-key/regenerate 区分）"""
+    user_id = session.get('user_id')
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': '用户不存在'}), 404
+    user.generate_api_key()
+    db.session.commit()
+    return jsonify({'api_key': user.api_key})
 
 # API - 用户设置
 @user_bp.route('/api/user/settings', methods=['PUT'])

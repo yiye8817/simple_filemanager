@@ -3,69 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文件管理系统</title>
+    <title>云端文件管理</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <!-- 增加版本管理 -->
     <link rel="stylesheet" href="{{ url_for('static', filename='version_manager/css/style.css') }}">
+    <!-- 代码高亮主题（用于代码块/Markdown 预览） -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.min.css">
     <!-- 添加断点续传的支持 -->
     <script src="https://cdn.jsdelivr.net/npm/spark-md5@3.0.2/spark-md5.min.js"></script>
        <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 </head>
-<body>
+<body data-app-brand="云端文件管理">
     <div class="container-fluid p-0 d-flex flex-column vh-100">
         <!-- 顶部导航栏 -->
-        <nav class="navbar navbar-expand-lg navbar-dark">
-            <div class="container-fluid">
-        <!-- 将品牌和主要导航项组合在一起 -->
-        <div class="d-flex align-items-center">
-            <a class="navbar-brand" href="#"> <!-- 假设主页的端点是 main.index -->
-                <i class="bi bi-cloud-fill me-2"></i>
-            </a>
-            <ul class="navbar-nav flex-row">
-                <li class="nav-item">
-                    <!-- 当前页面，标记为 active -->
-                    <a class="nav-link active" aria-current="page" href="#">云端文件管理</a>
-                </li>
-                <li class="nav-item ms-3">
-                    <!-- 新增的入口，链接到新的页面 -->
-                    <a class="nav-link active" href="{{ url_for('resource.index') }}">在线资源管理</a>
-                </li>
-                <li class="nav-item ms-3">
-                    <!-- 新增的版本入口，链接到新的页面 -->
-                    <a class="nav-link active" href="{{ url_for('query.page') }}">版本管理</a>
-                </li>
-                 
-            </ul>
-
-                <div class="d-flex flex-grow-1 mx-4 search-container">
-                    <div class="input-group">
-                        <span class="input-group-text bg-transparent border-end-0">
-                            <i class="bi bi-search"></i>
-                        </span>
-                        <input class="form-control bg-transparent border-start-0" type="search" placeholder="搜索全部文件" id="search-input">
+        <nav class="navbar app-top-navbar navbar-expand-lg navbar-dark border-0">
+            <div class="container-fluid px-3 px-lg-4 py-2 py-lg-0">
+                <div class="app-navbar-inner d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center gap-3 gap-lg-4 w-100">
+                    <!-- 左侧：品牌 + 模块入口 -->
+                    <div class="d-flex align-items-center flex-wrap gap-2 gap-sm-3 flex-shrink-0">
+                        <a class="navbar-brand app-navbar-brand d-flex align-items-center mb-0 py-1" href="#" title="云端文件管理">
+                            <span class="app-navbar-brand-icon d-inline-flex align-items-center justify-content-center rounded-3">
+                                <i class="bi bi-cloud-fill"></i>
+                            </span>
+                            <span class="d-none d-sm-inline ms-2 fw-semibold">云端文件</span>
+                        </a>
+                        <ul class="nav app-navbar-modules flex-row align-items-center flex-wrap gap-1 mb-0">
+                            <li class="nav-item">
+                                <a class="nav-link rounded-pill px-3 active" aria-current="page" href="#">文件</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link rounded-pill px-3" href="{{ url_for('resource.index') }}">资源</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link rounded-pill px-3" href="{{ url_for('query.page') }}">版本</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link rounded-pill px-3" href="{{ url_for('llm.llm_page') }}">大模型</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link rounded-pill px-3" href="{{ url_for('service_manager.services_page') }}">服务</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link rounded-pill px-3" href="{{ url_for('device.devices_page') }}">设备</a>
+                            </li>
+                        </ul>
                     </div>
-                </div>
-                <div class="ms-auto d-flex align-items-center">
-                    <div class="storage-info me-4">
-                        <div class="text-light mb-1 small" id="storage-text">已使用: 0GB / 10GB</div>
-                        <div class="progress" style="height: 4px;">
-                            <div class="progress-bar" id="storage-bar" role="progressbar" style="width: 0%"></div>
+                    <!-- 中间：搜索 -->
+                    <div class="app-navbar-search flex-grow-1 order-3 order-lg-2 min-w-0">
+                        <div class="input-group app-navbar-search-group mx-auto">
+                            <span class="input-group-text border-0">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input class="form-control border-0 shadow-none" type="search" placeholder="搜索全部文件…" id="search-input" autocomplete="off">
                         </div>
                     </div>
-                    <div class="dropdown">
-                        <a href="#" class="text-decoration-none dropdown-toggle d-flex align-items-center" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-person-circle fs-4 me-2"></i>
-                            <span class="text-light">{{ user_name }}</span>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#userSettingsModal"><i class="bi bi-gear me-2"></i>用户设置</a></li>
-                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#apiKeyModal"><i class="bi bi-key me-2"></i>API密钥</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right me-2"></i>退出登录</a></li>
-                        </ul>
+                    <!-- 右侧：存储 + 用户 -->
+                    <div class="d-flex align-items-center justify-content-between justify-content-lg-end gap-3 flex-shrink-0 order-2 order-lg-3 ms-lg-auto">
+                        <div class="app-navbar-storage storage-info">
+                            <div class="app-navbar-storage-label small text-white-50 mb-1" id="storage-text">已使用: 0GB / 10GB</div>
+                            <div class="progress app-navbar-progress rounded-pill" role="presentation">
+                                <div class="progress-bar rounded-pill" id="storage-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="dropdown app-navbar-user">
+                            <a href="#" class="app-navbar-user-trigger dropdown-toggle d-flex align-items-center text-decoration-none" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span class="app-navbar-avatar d-inline-flex align-items-center justify-content-center rounded-circle">
+                                    <i class="bi bi-person-fill"></i>
+                                </span>
+                                <span class="text-white text-truncate d-none d-md-inline ms-2" style="max-width: 8rem;">{{ user_name }}</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2 py-2">
+                                <li><a class="dropdown-item rounded-1 mx-1" href="#" data-bs-toggle="modal" data-bs-target="#userSettingsModal"><i class="bi bi-gear me-2"></i>用户设置</a></li>
+                                <li><a class="dropdown-item rounded-1 mx-1" href="#" data-bs-toggle="modal" data-bs-target="#apiKeyModal"><i class="bi bi-key me-2"></i>API密钥</a></li>
+                                <li><hr class="dropdown-divider my-2"></li>
+                                <li><a class="dropdown-item rounded-1 mx-1 text-danger" href="{{ url_for('auth.logout') }}"><i class="bi bi-box-arrow-right me-2"></i>退出登录</a></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -77,6 +93,9 @@
                 <div class="list-group border-0 rounded-0">
                     <a href="#" class="list-group-item active" id="all-files">
                         <i class="bi bi-folder me-2"></i>我的文件
+                    </a>
+                    <a href="#" class="list-group-item" id="every-files">
+                        <i class="bi bi-files me-2"></i>全部文件
                     </a>
                     <a href="#" class="list-group-item" id="images">
                         <i class="bi bi-image me-2"></i>图片
@@ -95,6 +114,15 @@
                     </a>
                     <a href="#" class="list-group-item" id="code">
                         <i class="bi bi-code-slash me-2"></i>代码文件
+                    </a>
+                    <a href="#" class="list-group-item" id="applications-android">
+                        <i class="bi bi-google-play me-2"></i>应用程序 · Android
+                    </a>
+                    <a href="#" class="list-group-item" id="applications-linux">
+                        <i class="bi bi-terminal me-2"></i>应用程序 · Linux
+                    </a>
+                    <a href="#" class="list-group-item" id="applications-windows">
+                        <i class="bi bi-windows me-2"></i>应用程序 · Windows
                     </a>
                     <a href="#" class="list-group-item" id="others">
                         <i class="bi bi-three-dots me-2"></i>其它
@@ -139,6 +167,9 @@
                         <button class="btn btn-outline" id="add-link-btn">
                             <i class="bi bi-link-45deg me-1"></i>添加链接
                         </button>
+                        <button class="btn btn-outline" id="import-url-btn">
+                            <i class="bi bi-cloud-download me-1"></i>从链接导入
+                        </button>
                         <button class="btn btn-outline" id="delete-btn" disabled>
                             <i class="bi bi-trash me-1"></i>删除
                         </button>
@@ -153,7 +184,22 @@
                         </button>
                     </div>
                     
-                    <div class="view-controls">
+                    <div class="view-controls d-flex align-items-center gap-2">
+                        <!-- 自动刷新状态: 默认开, 用户可点击徽章手动刷新, 可点开关停用 -->
+                        <div class="form-check form-switch m-0" title="周期性后台拉取文件列表, 不打断你的操作">
+                            <input class="form-check-input" type="checkbox" id="live-refresh-toggle" checked>
+                            <label class="form-check-label small text-muted" for="live-refresh-toggle">自动刷新</label>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="live-refresh-now" title="立即刷新当前列表">
+                            <i class="bi bi-arrow-clockwise"></i>
+                            <span id="live-refresh-status" class="small ms-1">就绪</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-success" id="musicfree-share-btn"
+                                title="配置 MusicFree 插件能访问哪些音频文件夹">
+                            <i class="bi bi-music-note-beamed"></i>
+                            <span class="small ms-1">MusicFree 分享</span>
+                            <span id="musicfree-share-badge" class="badge text-bg-secondary ms-1 d-none">0</span>
+                        </button>
                         <div class="btn-group">
                             <button class="btn btn-outline active" id="grid-view">
                                 <i class="bi bi-grid"></i>
@@ -174,11 +220,11 @@
                         <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th width="3%"></th>
-                                    <th width="37%">文件名</th>
-                                    <th width="15%">大小</th>
+                                    <th width="3%"><input type="checkbox" class="form-check-input" id="select-all-files" title="全选当前视图"></th>
+                                    <th width="32%" class="sortable-header user-select-none" data-sort="name" title="按名称排序" role="button">文件名 <span class="sort-indicator text-muted small" aria-hidden="true"></span></th>
+                                    <th width="15%" class="sortable-header user-select-none" data-sort="size" title="按大小排序" role="button">大小 <span class="sort-indicator text-muted small" aria-hidden="true"></span></th>
                                     <th width="15%">类型</th>
-                                    <th width="15%">修改日期</th>
+                                    <th width="15%" class="sortable-header user-select-none" data-sort="modified" title="按修改时间排序" role="button">修改日期 <span class="sort-indicator text-muted small" aria-hidden="true"></span></th>
                                     <th width="15%">操作</th>
                                 </tr>
                             </thead>
@@ -295,7 +341,7 @@
                     
                     <div class="input-group mb-3">
                         <span class="input-group-text">您的API密钥</span>
-                        <input type="text" class="form-control" id="user-api-key" readonly>
+                        <input type="text" class="form-control font-monospace" id="user-api-key" readonly placeholder="加载中…" autocomplete="off">
                         <button class="btn btn-outline-primary" type="button" onclick="copyApiKey()">复制</button>
                     </div>
                     
@@ -360,27 +406,205 @@ curl -X POST -H "X-API-Key: 您的API密钥" -F "file=@本地文件路径" https
             </div>
         </div>
     </div>
-    <!-- 新建文件模态框 -->
+    <!-- 新建文件模态框（富文本） -->
 <div class="modal fade" id="newFileModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content rich-file-modal">
             <div class="modal-header">
-                <h5 class="modal-title">新建文件</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <h5 class="modal-title">新建文件 · 富文本编辑</h5>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="rfToggleMaxBtn"
+                            title="最大化 / 还原 (Esc 还原)" aria-label="最大化">
+                        <i class="bi bi-arrows-fullscreen"></i>
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
             </div>
             <div class="modal-body">
-                <div class="mb-3">
-                    <label for="fileName" class="form-label">文件名</label>
-                    <input type="text" class="form-control" id="fileName" placeholder="请输入文件名">
+                <div class="row g-3 align-items-end mb-2">
+                    <div class="col-md-5">
+                        <label for="fileName" class="form-label mb-1">文件名</label>
+                        <input type="text" class="form-control" id="fileName" placeholder="例如：我的笔记">
+                        <div class="form-text small">未填写扩展名时，会按下方"保存格式"自动追加。</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="fileSaveFormat" class="form-label mb-1">保存格式</label>
+                        <select class="form-select" id="fileSaveFormat">
+                            <option value="md" selected>Markdown (.md)</option>
+                            <option value="html">HTML (.html)</option>
+                            <option value="txt">纯文本 (.txt)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 d-flex flex-wrap gap-2 justify-content-md-end align-items-end">
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="rfImportBtn">
+                            <i class="bi bi-upload me-1"></i>导入文件
+                        </button>
+                        <input type="file" id="rfImportInput" class="d-none"
+                               accept=".md,.markdown,.txt,.html,.htm,.csv,.xls,.xlsx">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="rfTogglePreviewBtn"
+                                title="切换 Markdown 预览">
+                            <i class="bi bi-eye me-1"></i>预览
+                        </button>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label for="fileContent" class="form-label">文件内容</label>
-                    <textarea class="form-control" id="fileContent" rows="10"></textarea>
+
+                <!-- 自定义工具栏 -->
+                <div id="rfEditorWrap">
+                    <div id="rfEditorToolbar" class="rf-toolbar">
+                        <select class="form-select form-select-sm rf-tb-select" data-rf-block title="段落 / 标题">
+                            <option value="P">正文</option>
+                            <option value="H1">标题 1</option>
+                            <option value="H2">标题 2</option>
+                            <option value="H3">标题 3</option>
+                            <option value="H4">标题 4</option>
+                            <option value="H5">标题 5</option>
+                            <option value="H6">标题 6</option>
+                            <option value="BLOCKQUOTE">引用</option>
+                            <option value="PRE">代码段</option>
+                        </select>
+                        <span class="rf-tb-sep"></span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="bold" title="粗体"><b>B</b></button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="italic" title="斜体"><i>I</i></button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="underline" title="下划线"><u>U</u></button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="strikeThrough" title="删除线"><s>S</s></button>
+                        <span class="rf-tb-sep"></span>
+                        <input type="color" class="form-control form-control-color form-control-sm rf-tb-color"
+                               id="rfFontColor" title="字体颜色" value="#212529">
+                        <input type="color" class="form-control form-control-color form-control-sm rf-tb-color"
+                               id="rfBgColor" title="背景色" value="#ffff00">
+                        <span class="rf-tb-sep"></span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="insertUnorderedList" title="无序列表">
+                            <i class="bi bi-list-ul"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="insertOrderedList" title="有序列表">
+                            <i class="bi bi-list-ol"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="outdent" title="减少缩进">
+                            <i class="bi bi-text-indent-right"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="indent" title="增加缩进">
+                            <i class="bi bi-text-indent-left"></i>
+                        </button>
+                        <span class="rf-tb-sep"></span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="justifyLeft" title="左对齐">
+                            <i class="bi bi-text-left"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="justifyCenter" title="居中">
+                            <i class="bi bi-text-center"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="justifyRight" title="右对齐">
+                            <i class="bi bi-text-right"></i>
+                        </button>
+                        <span class="rf-tb-sep"></span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                id="rfInsertLinkBtn" title="插入链接">
+                            <i class="bi bi-link-45deg"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                id="rfInsertImageBtn" title="插入图片">
+                            <i class="bi bi-image"></i>
+                        </button>
+                        <input type="file" id="rfInsertImageInput" class="d-none" accept="image/*">
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                id="rfInsertTableBtn" title="插入表格">
+                            <i class="bi bi-table"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                id="rfInsertCodeBtn" title="插入代码块">
+                            <i class="bi bi-code-square"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                id="rfInsertHrBtn" title="分割线">
+                            <i class="bi bi-dash-lg"></i>
+                        </button>
+                        <span class="rf-tb-sep"></span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="undo" title="撤销">
+                            <i class="bi bi-arrow-counterclockwise"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="redo" title="重做">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                data-rf-cmd="removeFormat" title="清除格式">
+                            <i class="bi bi-eraser"></i>
+                        </button>
+                        <span class="rf-tb-sep"></span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm rf-tb-btn"
+                                id="rfToggleTocBtn" title="目录（基于标题）">
+                            <i class="bi bi-list-nested"></i>
+                        </button>
+                    </div>
+                    <div class="rf-edit-area">
+                        <div id="rfEditor" class="rf-editor" contenteditable="true"
+                             data-placeholder="在此输入内容；可粘贴 Word/网页/Excel 片段，亦可点击上方“导入文件”读取本地 .md/.txt/.csv/.xlsx 等。"></div>
+                        <aside id="rfToc" class="rf-toc d-none" aria-label="文档目录">
+                            <div class="rf-toc-header">
+                                <span class="fw-semibold small text-muted">目录</span>
+                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none"
+                                        id="rfTocRefreshBtn" title="刷新目录">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                            </div>
+                            <div class="rf-toc-body" id="rfTocBody"></div>
+                        </aside>
+                    </div>
+                    <div id="rfPreview" class="rf-preview d-none"></div>
+                </div>
+                <div class="d-flex justify-content-between mt-2 small text-muted">
+                    <span>提示：粘贴 Excel 区域会保留为表格；图片以 base64 内嵌，建议合理控制单图大小。</span>
+                    <span id="rfStatus"></span>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" id="saveFileBtn">保存</button>
+                <button type="button" class="btn btn-primary" id="saveFileBtn">
+                    <i class="bi bi-save me-1"></i>保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 插入表格的小弹窗 -->
+<div class="modal fade" id="rfInsertTableModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">插入表格</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small mb-1">行数</label>
+                        <input type="number" class="form-control form-control-sm" id="rfTableRows" min="1" max="50" value="3">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small mb-1">列数</label>
+                        <input type="number" class="form-control form-control-sm" id="rfTableCols" min="1" max="20" value="3">
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" id="rfTableHeader" checked>
+                    <label class="form-check-label small" for="rfTableHeader">首行作为表头</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary btn-sm" id="rfInsertTableConfirm">插入</button>
             </div>
         </div>
     </div>
@@ -418,6 +642,435 @@ curl -X POST -H "X-API-Key: 您的API密钥" -F "file=@本地文件路径" https
         </div>
     </div>
 </div>
+
+<!-- 从链接导入 -->
+<div class="modal fade" id="importUrlModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">从链接导入</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">
+                    <strong>直接下载</strong>：把链接当作单个文件下到当前目录；
+                    <strong>爬取页面</strong>：打开网页抓页内可下载链接批量导入；
+                    <strong>视频站 (YouTube / Bilibili)</strong>：自动切换为 yt-dlp 下载完整视频 + 音频。
+                </p>
+                <div class="mb-2">
+                    <label class="form-label mb-1" for="import-url-input">链接地址</label>
+                    <input type="url" class="form-control" id="import-url-input" placeholder="https://">
+                    <div class="form-text" id="import-engine-hint"></div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-7">
+                        <label class="form-label mb-1" for="import-proxy-input">代理 (可选)</label>
+                        <input type="text" class="form-control" id="import-proxy-input"
+                               placeholder="如 127.0.0.1:7890 / http://user:pass@host:port / socks5://...">
+                        <div class="form-text">留空走系统 <code>HTTP(S)_PROXY</code>；填写仅本次生效，仅传给 yt-dlp / urllib。</div>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label mb-1" for="import-engine">下载引擎</label>
+                        <select class="form-select" id="import-engine">
+                            <option value="auto" selected>自动 (视频站用 yt-dlp)</option>
+                            <option value="http">强制 HTTP / 直链</option>
+                            <option value="ytdlp">强制 yt-dlp</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- yt-dlp 高级选项: 仅在引擎 = ytdlp 时显示 -->
+                <div class="row g-2 mb-2 d-none" id="import-ytdlp-opts">
+                    <div class="col-12">
+                        <label class="form-label mb-1" for="import-ytdlp-args">
+                            yt-dlp 额外参数 (可选)
+                            <span class="text-muted small" id="import-ytdlp-status"></span>
+                        </label>
+                        <input type="text" class="form-control font-monospace" id="import-ytdlp-args"
+                               placeholder='例如 -f "bestvideo[height<=720]+bestaudio" --cookies-from-browser firefox --write-subs'>
+                        <div class="form-text">空格分隔，支持引号；放在默认参数之后，可覆盖 <code>-f</code> / <code>--merge-output-format</code> 等。</div>
+                    </div>
+                    <div class="col-md-7">
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" id="import-aria2c" checked>
+                            <label class="form-check-label" for="import-aria2c">
+                                使用 <code>aria2c</code> 多线程下载
+                                <span class="text-muted small" id="import-aria2c-status"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small mb-1" for="import-aria2c-threads">aria2c 线程数</label>
+                        <input type="number" class="form-control form-control-sm" id="import-aria2c-threads"
+                               min="1" max="64" value="16">
+                    </div>
+                </div>
+                <div class="mb-3" id="import-mode-wrap">
+                    <label class="form-label mb-1">HTTP 方式</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="importMode" id="importModeDirect" value="direct" checked>
+                        <label class="form-check-label" for="importModeDirect">直接下载该链接的文件</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="importMode" id="importModeCrawl" value="crawl">
+                        <label class="form-check-label" for="importModeCrawl">从页面中爬取可下载链接并批量导入</label>
+                    </div>
+                </div>
+                <div id="import-progress-wrap" class="d-none">
+                    <label class="form-label mb-1">导入进度</label>
+                    <div class="progress mb-2">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" id="import-progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <p class="small mb-0" id="import-progress-text">准备中…</p>
+                    <ul class="small mt-2 mb-0 text-muted" id="import-done-list"></ul>
+                </div>
+                <div class="mt-3 d-none" id="import-log-wrap">
+                    <div class="d-flex align-items-center mb-1">
+                        <label class="form-label small text-muted mb-0">运行日志</label>
+                        <button type="button" class="btn btn-link btn-sm p-0 ms-auto me-2" id="import-log-toggle"
+                                title="折叠 / 展开" data-collapsed="0">
+                            <i class="bi bi-chevron-up"></i>
+                        </button>
+                        <button type="button" class="btn btn-link btn-sm p-0" id="import-log-copy" title="复制全部日志">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                    <pre id="import-log-pane" style="background:#0b1020;color:#d6deeb;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem;line-height:1.4;padding:10px 12px;border-radius:6px;max-height:280px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin-bottom:0;"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="import-close-btn">关闭</button>
+                <button type="button" class="btn btn-primary" id="import-start-btn">开始导入</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 文件夹右键菜单：自定义 contextmenu -->
+<div id="file-context-menu" class="dropdown-menu shadow" style="display:none;position:fixed;z-index:2080;min-width:200px;"></div>
+
+<!-- 文件夹监听管理模态框 -->
+<div class="modal fade" id="folderWatchModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-broadcast me-1"></i>
+                    文件夹监听 · <span id="fw-folder-label" class="text-muted small"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info py-2 small mb-3">
+                    <i class="bi bi-info-circle me-1"></i>
+                    监听该文件夹（及子目录）的文件 <code>created</code> / <code>modified</code> / <code>deleted</code> 事件，
+                    自动以 <code>POST application/json</code> 推送到配置的 URL；可选 <code>secret</code> 用 HMAC-SHA256 签名（<code>X-Signature</code> 头）。
+                </div>
+
+                <!-- 已有 watch 列表 -->
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <h6 class="mb-0">已配置的监听</h6>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" id="fw-refresh-btn" title="刷新">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                    <div id="fw-list" class="list-group small">
+                        <div class="list-group-item text-muted text-center">加载中...</div>
+                    </div>
+                </div>
+
+                <!-- 新增/编辑表单 -->
+                <hr>
+                <h6 id="fw-form-title">新增监听</h6>
+                <form id="fw-form" class="row g-2">
+                    <input type="hidden" id="fw-id">
+                    <input type="hidden" id="fw-folder-id">
+                    <div class="col-12">
+                        <label class="form-label small mb-0">远端接口 URL <span class="text-danger">*</span></label>
+                        <input type="url" class="form-control form-control-sm" id="fw-url"
+                               placeholder="https://example.com/hooks/file-manager" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small mb-0">Secret（可选，启用 HMAC 签名）</label>
+                        <input type="text" class="form-control form-control-sm" id="fw-secret"
+                               placeholder="留空则不签名" autocomplete="off">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small mb-0">事件</label>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="fw-ev-created" checked>
+                            <label class="form-check-label small" for="fw-ev-created">created</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="fw-ev-modified" checked>
+                            <label class="form-check-label small" for="fw-ev-modified">modified</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="fw-ev-deleted" checked>
+                            <label class="form-check-label small" for="fw-ev-deleted">deleted</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="fw-include-subdirs" checked>
+                            <label class="form-check-label small" for="fw-include-subdirs">监听子目录（关闭则仅直接子项）</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="fw-enabled" checked>
+                            <label class="form-check-label small" for="fw-enabled">启用</label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="fw-reset-btn">清空表单</button>
+                <button type="button" class="btn btn-primary btn-sm" id="fw-save-btn">
+                    <i class="bi bi-save me-1"></i>保存监听
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 文件夹插件管理模态框 -->
+<div class="modal fade" id="folderPluginModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-puzzle me-1"></i>
+                    文件夹插件 · <span id="fp-folder-label" class="text-muted small"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info py-2 small mb-3">
+                    <i class="bi bi-info-circle me-1"></i>
+                    插件绑定到当前文件夹，客户端调用 <code>POST /api/external/folders/&lt;id&gt;/plugins/&lt;name&gt;/invoke</code>
+                    （body 含 <code>action</code> / <code>params</code>），插件读取文件夹下文件并返回结构化结果。
+                    支持<strong>声明式</strong>（JSON 规则）与 <strong>Python</strong>（自定义 <code>invoke()</code>）两种形态。
+                </div>
+
+                <!-- 已有插件列表 -->
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <h6 class="mb-0">已配置的插件</h6>
+                        <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" id="fp-refresh-btn" title="刷新">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                    <div id="fp-list" class="list-group small">
+                        <div class="list-group-item text-muted text-center">加载中...</div>
+                    </div>
+                </div>
+
+                <!-- 新增/编辑表单 -->
+                <hr>
+                <h6 id="fp-form-title">新增插件</h6>
+                <form id="fp-form" class="row g-2">
+                    <input type="hidden" id="fp-id">
+                    <input type="hidden" id="fp-folder-id">
+                    <div class="col-md-6">
+                        <label class="form-label small mb-0">插件名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" id="fp-name"
+                               placeholder="如 word_audio (同一文件夹下唯一)" required maxlength="80">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small mb-0">类型</label>
+                        <select class="form-select form-select-sm" id="fp-kind">
+                            <option value="declarative">声明式 (JSON, 安全 · 推荐)</option>
+                            <option value="python">Python 代码 (高灵活, 信任模型)</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small mb-0">描述</label>
+                        <input type="text" class="form-control form-control-sm" id="fp-description"
+                               placeholder="可选, 给前端展示用">
+                    </div>
+
+                    <div class="col-12" id="fp-config-group">
+                        <label class="form-label small mb-0">声明式配置 (JSON)</label>
+                        <textarea class="form-control form-control-sm font-monospace" id="fp-config" rows="14" spellcheck="false"
+                                  placeholder='{"actions": {"lookup": {"params": [...], "match": {...}, "response": {...}}}}'></textarea>
+                        <div class="small text-muted mt-1">
+                            支持的匹配策略: <code>filename</code> / <code>glob</code> / <code>list</code>。
+                            占位符: <code>{param名}</code> 来自请求参数, <code>{file.id}</code>/<code>{file.url}</code>/<code>{file.name}</code> 来自命中文件。
+                        </div>
+                    </div>
+
+                    <div class="col-12" id="fp-code-group" style="display:none;">
+                        <label class="form-label small mb-0">Python 源码</label>
+                        <textarea class="form-control form-control-sm font-monospace" id="fp-code" rows="14" spellcheck="false"
+                                  placeholder="def invoke(action, params, ctx):&#10;    # ctx.list_files() / ctx.find_file(name='xx.mp3') / ctx.get_file_url(id)&#10;    return {'success': True}"></textarea>
+                        <div class="small text-muted mt-1">
+                            必须定义 <code>def invoke(action, params, ctx)</code> 并返回 dict。
+                            <code>ctx</code> 提供 <code>list_files()</code> / <code>find_file()</code> / <code>find_files()</code> / <code>get_file_url(id)</code> / <code>log(msg)</code>。
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="fp-include-subdirs" checked>
+                            <label class="form-check-label small" for="fp-include-subdirs">递归子目录</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="fp-enabled" checked>
+                            <label class="form-check-label small" for="fp-enabled">启用</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check form-switch"
+                             title="开启后该插件可被任意客户端通过 /api/public/... 无授权调用, 返回的下载 URL 自带 HMAC 签名">
+                            <input class="form-check-input" type="checkbox" id="fp-public">
+                            <label class="form-check-label small" for="fp-public">
+                                <i class="bi bi-globe text-warning"></i> 公开访问 (无需 API Key)
+                            </label>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- 访问示例区: 保存后展示具体的调用 URL / curl 命令, 客户端复制即用 -->
+                <div id="fp-access-section" class="mt-3" style="display:none;">
+                    <hr>
+                    <h6>
+                        <i class="bi bi-code-slash me-1"></i>访问示例
+                        <span id="fp-access-mode-badge" class="badge bg-secondary ms-1 small">需 API Key</span>
+                    </h6>
+                    <div class="small text-muted mb-2">
+                        客户端可以用以下任意一种方式调用本插件; URL 中
+                        <code class="text-primary">&lt;action&gt;</code>/<code class="text-primary">params</code>
+                        替换为业务定义的实际值。
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1 text-muted">Invoke URL</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control form-control-sm font-monospace"
+                                   id="fp-access-url" readonly>
+                            <button class="btn btn-outline-secondary" type="button"
+                                    data-fp-copy="fp-access-url" title="复制 URL">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1 text-muted">curl 示例</label>
+                        <div class="input-group input-group-sm">
+                            <textarea class="form-control form-control-sm font-monospace"
+                                      id="fp-access-curl" rows="3" readonly></textarea>
+                            <button class="btn btn-outline-secondary" type="button"
+                                    data-fp-copy="fp-access-curl" title="复制 curl">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="small text-muted">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <span id="fp-access-tip">
+                            外部客户端调用需要在请求头里带 <code>X-API-Key: &lt;你的 API Key&gt;</code>;
+                            插件响应里 <code>url</code> 字段同样需要 <code>X-API-Key</code> 才能下载。
+                        </span>
+                    </div>
+                </div>
+
+                <!-- 调用测试区 -->
+                <hr>
+                <h6><i class="bi bi-play-circle me-1"></i>调用测试</h6>
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <label class="form-label small mb-0">action</label>
+                        <input type="text" class="form-control form-control-sm" id="fp-test-action"
+                               placeholder="lookup">
+                    </div>
+                    <div class="col-md-9">
+                        <label class="form-label small mb-0">params (JSON)</label>
+                        <input type="text" class="form-control form-control-sm font-monospace" id="fp-test-params"
+                               placeholder='{"word": "hello"}'>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="fp-test-btn">
+                        <i class="bi bi-play me-1"></i>调用当前编辑的插件
+                    </button>
+                    <span class="small text-muted ms-2">注意：先「保存」过的插件才能被调用</span>
+                </div>
+                <pre id="fp-test-result" class="mt-2 small bg-light border rounded p-2"
+                     style="max-height:240px;overflow:auto;display:none;"></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="fp-reset-btn">清空表单</button>
+                <button type="button" class="btn btn-primary btn-sm" id="fp-save-btn">
+                    <i class="bi bi-save me-1"></i>保存插件
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MusicFree 分享配置模态框 -->
+<div class="modal fade" id="musicfreeShareModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-music-note-beamed me-1 text-success"></i>MusicFree 分享配置
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">
+                    选择要分享给 MusicFree 安卓/桌面播放器的音频文件夹。仅分享白名单内目录的音频, 实际播放由
+                    <code>/api/music/track/&lt;id&gt;/source</code> 校验后透传 <code>X-API-Key</code> 头。
+                </p>
+                <div class="alert alert-light border d-flex align-items-center gap-3 mb-3 py-2">
+                    <div class="form-check form-switch m-0">
+                        <input class="form-check-input" type="checkbox" id="ms-enabled-switch" role="switch">
+                        <label class="form-check-label fw-semibold" for="ms-enabled-switch">启用 MusicFree 分享</label>
+                    </div>
+                    <span class="text-muted small">关闭后所有 <code>/api/music/*</code> 端点返回 403。</span>
+                    <span id="ms-status-text" class="small ms-auto text-muted"></span>
+                </div>
+
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <strong class="small">可分享的文件夹 <span class="text-muted">(仅显示含音频的目录)</span></strong>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-secondary" id="ms-select-all">全选</button>
+                        <button type="button" class="btn btn-outline-secondary" id="ms-select-none">全清</button>
+                        <button type="button" class="btn btn-outline-secondary" id="ms-refresh-folders" title="刷新目录列表">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div id="ms-folders-list" class="list-group list-group-flush small">
+                    <div class="text-muted text-center py-3">加载中…</div>
+                </div>
+
+                <details class="mt-3">
+                    <summary class="small text-muted">MusicFree 客户端连接信息</summary>
+                    <div class="small mt-2 ps-2 border-start">
+                        <div>插件 URL: <code id="ms-plugin-url">/static/musicfree/file-manager.js</code>
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 ms-1" data-ms-copy="#ms-plugin-url">复制</button>
+                        </div>
+                        <div class="mt-1">baseUrl: <code id="ms-base-url"></code></div>
+                        <div class="text-muted small mt-1">把上面 URL 填到 MusicFree「插件管理 → 从网络安装」, baseUrl/apiKey 填到「用户变量」即可。</div>
+                    </div>
+                </details>
+            </div>
+            <div class="modal-footer">
+                <span id="ms-summary" class="me-auto small text-muted"></span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-success btn-sm" id="ms-save-btn">
+                    <i class="bi bi-save me-1"></i>保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
    <!-- 版本管理模态框 -->
     <div class="modal fade" id="versionModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -464,7 +1117,8 @@ curl -X POST -H "X-API-Key: 您的API密钥" -F "file=@本地文件路径" https
                                 <div class="input-group">
                                     <!-- placeholder="留空自动生成" -->
                                     <input type="text" class="form-control" name="version" id="versionNumber" >
-                                    <button class="btn btn-outline-secondary" type="button" onclick="getAutoVersion()">自动生成</button>
+                                    <button class="btn btn-outline-secondary" type="button" id="auto-version-btn" onclick="getAutoVersion()">自动生成</button>
+                                    <span id="auto-version-status" class="small text-muted ms-2 d-none"></span>
                                 </div>
                             </div>
                             <div class="col-md-6">
@@ -521,7 +1175,10 @@ curl -X POST -H "X-API-Key: 您的API密钥" -F "file=@本地文件路径" https
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/core.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/highlight.min.js"></script>
-  
+    <!-- Markdown/Excel/CSV 互转依赖 -->
+    <script src="https://cdn.jsdelivr.net/npm/turndown@7.1.2/dist/turndown.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script src="{{ url_for('static', filename='version_manager/js/main.js') }}"></script>
 </body>

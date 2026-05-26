@@ -13,6 +13,18 @@ class Config:
     BACKUP_FOLDER='vm_backup'
     MAX_STORAGE_GB = 100  # 100GB 最大存储空间
 
+    # FolderWatch / Webhook 用：拼 download_url / preview_url 时的基址；
+    # 不配则用当前请求的 host_url 推断（适合直连场景）。反向代理或外网域名建议显式设置。
+    PUBLIC_BASE_URL = os.environ.get('PUBLIC_BASE_URL')
+
+    # ===== 设备 agent 自助注册 (/api/agent/enroll) =====
+    # 默认开放: 内网部署友好, agent 只需配 --server-url 即可 enroll。
+    # 公网部署请把 OPEN_ENROLL 设为 False, 并配 ENROLL_TOKEN, agent 必须带 X-Enroll-Token。
+    DEVICE_AGENT_OPEN_ENROLL = (os.environ.get('DEVICE_AGENT_OPEN_ENROLL', '1') == '1')
+    DEVICE_AGENT_ENROLL_TOKEN = os.environ.get('DEVICE_AGENT_ENROLL_TOKEN', '')
+    # 新设备自助注册时归属的 user_id; 不配则取第一个 / admin 用户
+    DEVICE_AGENT_DEFAULT_USER_ID = os.environ.get('DEVICE_AGENT_DEFAULT_USER_ID')
+
         # 主数据库配置（词汇数据库）
     # SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///vocabulary.db'
     
